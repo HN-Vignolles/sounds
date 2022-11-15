@@ -8,8 +8,8 @@ import json, os
 from recorder import Recorder
 from pathlib import Path
 import pandas as pd
-from test_config import samples_path,sound_events
-#from config import samples_path,sound_events
+#from test_config import samples_path,sound_events
+from config import samples_path,sound_events
 
 
 # c.f. https://github.com/sintezcs/flask-threads
