@@ -175,7 +175,7 @@
         async function save(element) {
             if (recording === true) {
                 fold = $('#fold-input').val();
-                fold = parseInt(fold);
+                fold = parseInt(fold ?? 1);
                 const res = await fetch('/api/rec', {
                     method: 'PUT',
                     body: JSON.stringify({ 'action': 'save', 'event': element.id, 'fold': fold })
