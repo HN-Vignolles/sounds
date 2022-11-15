@@ -12,4 +12,5 @@ python app.py
 
 # TODO
 - switch to `ffmpeg` backend
+- https://github.com/marketplace/actions/setup-ffmpeg
 - c.f. https://github.com/smirnov-am/flask-streaming

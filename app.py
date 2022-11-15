@@ -22,7 +22,7 @@ if not samples_path.exists():
     samples_path.mkdir()
 
 
-rec = Recorder(samples_path,0,sample_duration=2)
+rec = Recorder(samples_path,' ',sample_duration=2)
 devices = [d for d in rec.query_devices()]
 
 
@@ -31,6 +31,7 @@ def base():
     df = pd.read_csv(samples_path / 'samples.csv')
     folds = set(df['fold'])
     table = []
+    print(devices)
     return render_template('index.html',events=sound_events,devices=devices,table=table,folds=folds)
 
 
