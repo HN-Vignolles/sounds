@@ -8,8 +8,8 @@ import json, os
 from recorder import Recorder
 from pathlib import Path
 import pandas as pd
-#from test_config import samples_path,sound_events
-from config import samples_path,sound_events
+from test_config import samples_path,sound_events
+#from config import samples_path,sound_events
 
 
 # c.f. https://github.com/sintezcs/flask-threads
@@ -78,7 +78,6 @@ def apiRec():
         req = request.get_json(force=True)
         name = req.get('event','unnamed-event')
         fold = req.get('fold','1') or '1'
-        print(f'fold: {fold}')
         x,y = rec.save(name,fold)
         table = getTable(samples_path / 'samples.csv',fold)
         return {'action':'save','x':x,'y':y,'table':table,'fold':fold}
