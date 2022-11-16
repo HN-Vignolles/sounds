@@ -8,7 +8,6 @@ from threading import Lock, Thread, Timer
 
 import numpy as np
 import pandas as pd
-import sounddevice as sd
 import soundfile as sf
 
 
@@ -24,7 +23,6 @@ class RecorderBase():
         self._recording = False
         self._elapsed = 0.0
         self._timer = None
-        self._buffLen = 60
 
     def _start_timer(self):
         self._timer = Timer(0.1,self._start_timer)
@@ -80,19 +78,22 @@ class Recorder(RecorderBase):
         
         # https://trac.ffmpeg.org/wiki/Null
         self._input_dev_str = f'-f pulse -i {input_device}'
-        self._circ_buff = deque(maxlen=sample_duration * sample_rate * 2)
-        self.ffmpeg_cmd = f"/usr/bin/ffmpeg {self._input_dev_str} -ar {sample_rate} -ac 1 -f s16le -".split()
+        self._circ_buff = deque(maxlen=sample_duration * sample_rate * 2)    # 2 bytes per sample
+        self.ffmpeg_cmd = f"/usr/bin/ffmpeg -re {self._input_dev_str} \
+                            -ar {sample_rate} -ac 1 -f s16le -blocksize 100 -flush_packets 1 -".split()
         self._lock = Lock()
         self.samples_path = Path(samples_path)
         self.df_csv = self.samples_path / 'samples.csv'
         if not self.df_csv.exists():
             df = pd.DataFrame(columns=df_columns)
             df.to_csv(self.df_csv,index=False)
+        len = self._sample_duration * self._sample_rate
+        self._x = np.linspace(0,self._sample_duration,len)
 
     def start(self):
         if not self._recording:
             try:
-                self._ffmpeg = subprocess.Popen(self.ffmpeg_cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+                self._ffmpeg = subprocess.Popen(self.ffmpeg_cmd,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
             except:
                 raise
 
@@ -102,7 +103,7 @@ class Recorder(RecorderBase):
             self._recording = True
             self._start_timer()
             self._start_reader()
-            self._start_stderr_reader()
+            #self._start_stderr_reader()
 
     def _start_stderr_reader(self):
         self._stderr_thread = Thread(target=self._stderr_reader,args=())
@@ -120,9 +121,9 @@ class Recorder(RecorderBase):
     def _reader(self):
         try:
             while self._recording:
-                self._lock.acquire()
-                self._circ_buff.extend(self._ffmpeg.stdout.read(100))
-                self._lock.release()
+                #self._lock.acquire()
+                self._circ_buff.extend(self._ffmpeg.stdout.read(10))
+                #self._lock.release()
 
         except Exception as e:
             print(e)
@@ -134,15 +135,20 @@ class Recorder(RecorderBase):
             self._elapsed = 0.0
             self._ffmpeg.kill()
             self._reader_thread.join()
-            self._stderr_thread.join()
+            #self._stderr_thread.join()
 
     @property
     def np_circ_buff(self):
-        self._lock.acquire()
+        #self._lock.acquire()
         # '<i2': little endian 16-bit integer
         np_array = np.frombuffer(bytes(self._circ_buff),dtype='<i2')
-        self._lock.release()
+        #self._lock.release()
         return np_array
+
+    @property
+    def xy_buff(self):
+        np_array = self.np_circ_buff
+        return self._x.tolist(),np_array.flatten().tolist()
 
     def setDevice(self,device):
         pass
@@ -162,18 +168,13 @@ class Recorder(RecorderBase):
             self._elapsed = 0
             filename = f'{name}-{uuid.uuid4()}.wav'
             np_sample = self.np_circ_buff
-            """self._sample[np.isnan(self._sample)] = 0
-            self._sample[self._sample > 1] = 0
-            self._sample[self._sample < -1] = 0"""
             sf.write(self.samples_path / filename,np_sample,samplerate=self._sample_rate,subtype='PCM_16')
             df = pd.read_csv(self.df_csv)
             s = pd.Series([filename,-1,name,fold],index=df_columns)
             df = pd.concat([df, s.to_frame().T])
             df.to_csv(self.df_csv,index=False)
             self._last = filename
-            len = self._sample_duration * self._sample_rate
-            x = np.linspace(0,self._sample_duration,len)
-            return x.tolist(),np_sample.flatten().tolist()
+            return self.xy_buff
 
 if __name__ == "__main__":
     rec = Recorder('./datasets','4')

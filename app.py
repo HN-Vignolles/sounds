@@ -12,7 +12,6 @@ import pandas as pd
 from config import samples_path,sound_events
 
 
-# c.f. https://github.com/sintezcs/flask-threads
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.urandom(42)
 sock = Sock(app)
@@ -22,7 +21,7 @@ if not samples_path.exists():
     samples_path.mkdir()
 
 
-rec = Recorder(samples_path,' ',sample_duration=2)
+rec = Recorder(samples_path,'4',sample_duration=2,sample_rate=16000)
 devices = [d for d in rec.query_devices()]
 
 
@@ -31,7 +30,6 @@ def base():
     df = pd.read_csv(samples_path / 'samples.csv')
     folds = set(df['fold'])
     table = []
-    print(devices)
     return render_template('index.html',events=sound_events,devices=devices,table=table,folds=folds)
 
 
@@ -41,12 +39,14 @@ def handle(ws):
     try:
         while True:
             data = ws.receive()
-            if data=='elapsed':
+            if data == 'elapsed':
                 ws.send(json.dumps({'elapsed' : f'{rec.elapsed:0.2f}'}))
-            if data=='close':
+            if data == 'plot':
+                x,y = rec.xy_buff
+                ws.send(json.dumps({'plot': {'x':x, 'y':y}}))
+            if data == 'close':
                 break
-            # data=='plot'
-            # {'plot' : rec.circ_buffer}
+
     except Exception as e:
         print(e)
     return ''

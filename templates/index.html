@@ -122,7 +122,7 @@
         let dataTest = [{ "line": { "color": "blue" }, "x": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], "y": [-0.209590387511489, -0.20192923508006402, -0.125599795026844, 0.06877490143333401, 0.0061935846882860005, 0.019254895624578, -0.112608955560844, -0.15673144293375402, -0.13994229625173202, -0.040659162679208], "type": "scatter" }]
         let folds = "{{folds}}".replace('{','').split(',').map(s => parseInt(s));
 
-        Plotly.plot('fig', [{}], { height: 250, margin: { t: 28, b: 28 }, yaxis: { range: [-1, 1] } });
+        Plotly.plot('fig', [{}], { height: 250, margin: { t: 28, b: 28 }, yaxis: { range: [-2000, 2000] } });
         let recording = false;
 
         async function selectDevice(device) {
@@ -220,12 +220,17 @@
             $(id).html(inner_html);
         }
         socket.onmessage = event => {
-            elapsed = JSON.parse(event.data)['elapsed']
-            $("#elapsed").text('Time elapsed (buffer): ' + elapsed);
+            message = JSON.parse(event.data);
+            if(message['elapsed'] !== undefined)
+                $("#elapsed").text('Time elapsed (buffer): ' + message['elapsed']);
+            if(message['plot'] !== undefined)
+                nx = message['plot'].x;
+                ny = message['plot'].y;
+                Plotly.update('fig',{ x:[nx],y:[ny] },{});
         };
         setInterval(() => {
             if (socket) {
-                socket.send('elapsed');
+                socket.send('plot');
             }
         }, 250);
     </script>
