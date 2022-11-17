@@ -3,6 +3,7 @@ import os
 import subprocess
 import uuid
 from collections import deque
+from struct import unpack
 from pathlib import Path
 from threading import Lock, Thread, Timer
 
@@ -16,8 +17,8 @@ pd.set_option('max_colwidth',None)
 
 
 class RecorderBase():
-    def __init__(self,sample_duration,sample_rate):
-        self._sample_duration = sample_duration
+    def __init__(self,rec_duration,sample_rate):
+        self._rec_duration = rec_duration
         self._sample_rate = sample_rate
         self._last = ''
         self._recording = False
@@ -67,28 +68,37 @@ import pulsectl
 # TODO: set volume (pulsectl)
 
 class Recorder(RecorderBase):
-    def __init__(self,samples_path,input_device,
-                 sample_duration=2,sample_rate=44100):
-        super().__init__(sample_duration,sample_rate)
+    def __init__(self,data_path,input_device,
+                 rec_duration=2,sample_rate=44100,format='s16le'):
+        super().__init__(rec_duration,sample_rate)
 
         if not input_device:
             raise ValueError("input_device must be supplied")
-        if not samples_path:
-            raise ValueError("samples_path must be supplied")
+        if not data_path:
+            raise ValueError("data_path must be supplied")
+        if format not in ['s16le']:
+            # TODO: add 'f32le'
+            raise ValueError(f"{format} not implemented yet")
         
-        # https://trac.ffmpeg.org/wiki/Null
+        self._format = format
+        len = self._rec_duration * self._sample_rate
+        self._bytes_per_sample = 2   # 2: bytes per sample (s16le)
+        self._chunk_size = 100
+        out_buff_size = (self._sample_rate * self._bytes_per_sample) // self._chunk_size
+        self._circ_buff = deque(maxlen=len * self._bytes_per_sample)
+        self._out_buff = deque(maxlen=out_buff_size*2)   # 2: safe margin
+        self._x = np.linspace(0,self._rec_duration,len).tolist()
+
+        # '-f lavfi -i "sine=frequency=880"'
         self._input_dev_str = f'-f pulse -i {input_device}'
-        self._circ_buff = deque(maxlen=sample_duration * sample_rate * 2)    # 2 bytes per sample
         self.ffmpeg_cmd = f"/usr/bin/ffmpeg -re {self._input_dev_str} \
-                            -ar {sample_rate} -ac 1 -f s16le -blocksize 100 -flush_packets 1 -".split()
+                            -ar {sample_rate} -ac 1 -f {self._format} -blocksize 1000 -flush_packets 1 -".split()
         self._lock = Lock()
-        self.samples_path = Path(samples_path)
-        self.df_csv = self.samples_path / 'samples.csv'
+        self.data_path = Path(data_path)
+        self.df_csv = self.data_path / 'samples.csv'
         if not self.df_csv.exists():
             df = pd.DataFrame(columns=df_columns)
             df.to_csv(self.df_csv,index=False)
-        len = self._sample_duration * self._sample_rate
-        self._x = np.linspace(0,self._sample_duration,len)
 
     def start(self):
         if not self._recording:
@@ -119,10 +129,13 @@ class Recorder(RecorderBase):
             print('stderr_reader: ',e)
 
     def _reader(self):
+        unpack_str = f'<{self._chunk_size/self._bytes_per_sample}h'
         try:
             while self._recording:
                 #self._lock.acquire()
-                self._circ_buff.extend(self._ffmpeg.stdout.read(10))
+                data = self._ffmpeg.stdout.read(self._chunk_size)
+                self._circ_buff.extend(data)
+                #self._out_buff.append(unpack(unpack_str,data))
                 #self._lock.release()
 
         except Exception as e:
@@ -148,7 +161,7 @@ class Recorder(RecorderBase):
     @property
     def xy_buff(self):
         np_array = self.np_circ_buff
-        return self._x.tolist(),np_array.flatten().tolist()
+        return self._x,np_array.flatten().tolist()
 
     def setDevice(self,device):
         pass
@@ -168,7 +181,7 @@ class Recorder(RecorderBase):
             self._elapsed = 0
             filename = f'{name}-{uuid.uuid4()}.wav'
             np_sample = self.np_circ_buff
-            sf.write(self.samples_path / filename,np_sample,samplerate=self._sample_rate,subtype='PCM_16')
+            sf.write(self.data_path / filename,np_sample,samplerate=self._sample_rate,subtype='PCM_16')
             df = pd.read_csv(self.df_csv)
             s = pd.Series([filename,-1,name,fold],index=df_columns)
             df = pd.concat([df, s.to_frame().T])
@@ -177,5 +190,6 @@ class Recorder(RecorderBase):
             return self.xy_buff
 
 if __name__ == "__main__":
-    rec = Recorder('./datasets','4')
-    code.interact(local=dict(globals(),**locals()))
+    rec = Recorder('./datasets','1')
+    #code.interact(local=dict(globals(),**locals()))
+    rec.start()

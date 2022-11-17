@@ -21,7 +21,7 @@ if not samples_path.exists():
     samples_path.mkdir()
 
 
-rec = Recorder(samples_path,'4',sample_duration=2,sample_rate=16000)
+rec = Recorder(samples_path,'1',rec_duration=2,sample_rate=16000)
 devices = [d for d in rec.query_devices()]
 
 
@@ -62,6 +62,7 @@ def apiRec():
     elif action == 'device':
         # select device
         device_index = request.get_json(force=True)['index']
+        print(f'device_index: {device_index}')
         device = [i for i in devices if i['index']==int(device_index)][0]
         rec.setDevice(device['name'])
         return {'action':'device','device':device}
