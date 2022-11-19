@@ -38,19 +38,24 @@ def handle(ws):
     print('New WebSocket client')
     try:
         while True:
-            data = ws.receive()
-            if data == 'elapsed':
-                ws.send(json.dumps({'elapsed' : f'{rec.elapsed:0.2f}'}))
-            if data == 'plot':
-                x,y = rec.xy_buff
-                ws.send(json.dumps({'plot': {'x':x, 'y':y}}))
-            if data == 'close':
-                break
+            #data = ws.receive()
+            #if data == 'roll' and rec.is_recording:
+            #    y = rec.decoded_queue
+            #    ws.send(json.dumps({'roll': {'y':y}}))
+            #if data == 'close':
+            #    break
+            if rec.is_recording():
+                y = rec.decoded_queue
+                if y:
+                    ws.send(json.dumps({'roll':{'y':y}}))
 
     except Exception as e:
         print(e)
     return ''
 
+@app.route('/api/rec/x')
+def getX():
+    return {'x':rec.x}
 
 @app.route('/api/rec',methods=['PUT'])
 def apiRec():

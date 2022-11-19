@@ -19,6 +19,9 @@
             max-height: 200px;
             overflow-y: auto;
         }
+        canvas {
+            border: 1px dashed black;
+        }
     </style>
 </head>
 
@@ -30,11 +33,6 @@
                 <button class="btn btn-success" id="toggle" onclick="toggle()" disabled="true" autocomplete="off">
                     Start
                 </button>
-            </div>
-            <div class="col-md-3 mt-1">
-                <span id="elapsed">
-                    Elapsed
-                </span>
             </div>
             <div class="col-md-5">
                 <div class="dropdown">
@@ -76,6 +74,11 @@
                     <input id="fold-input" type="text" class="form-control" 
                         aria-label="Small" aria-describedby="inputGroup-sizing-sm" placeholder="1"/>
                   </div>
+            </div>
+        </div>
+        <div class="row justify-content-md-center">
+            <div id="test-fig">
+                <canvas id="roll"></canvas>
             </div>
         </div>
         <div class="row justify-content-md-center py-3">
@@ -149,6 +152,13 @@
             }  
         }
 
+        async function getX(){
+            // get X values
+            const res = await fetch('/api/rec/x');
+            const json = await res.json();
+            return json['x'];
+        }
+
         async function toggle() {
             let action;
             if (recording === false) {
@@ -219,20 +229,23 @@
             inner_html += '</div><span id="fold-span" class="ml-2">'+ fold + '</span>';
             $(id).html(inner_html);
         }
-        socket.onmessage = event => {
-            message = JSON.parse(event.data);
-            if(message['elapsed'] !== undefined)
-                $("#elapsed").text('Time elapsed (buffer): ' + message['elapsed']);
-            if(message['plot'] !== undefined)
-                nx = message['plot'].x;
-                ny = message['plot'].y;
-                Plotly.update('fig',{ x:[nx],y:[ny] },{});
-        };
-        setInterval(() => {
-            if (socket) {
-                socket.send('plot');
-            }
-        }, 250);
+
+        async function initCanvas(id){
+            let X = await getX();
+            socket.onmessage = event => {
+                message = JSON.parse(event.data);
+                if(message['roll'] !== undefined){
+                    ny = message['roll'].y;
+                    console.log(ny);
+                }
+            };
+            let fig = document.getElementById(id);
+            let ctx = fig.getContext('2d');
+            let cw = fig.width = 500;
+            let ch = fig.height = 250;
+
+        }
+        initCanvas('roll');
     </script>
     <!-- jQuery first, then Popper.js, then Bootstrap JS -->
     <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"

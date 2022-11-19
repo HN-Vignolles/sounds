@@ -1,5 +1,5 @@
 import code
-import os
+import sys,os
 import subprocess
 import uuid
 from collections import deque
@@ -55,7 +55,7 @@ class RecorderBase():
         """set input device"""
     
     def is_recording(self):
-        return self._recording()
+        return self._recording
 
     @property
     def elapsed(self):
@@ -85,9 +85,16 @@ class Recorder(RecorderBase):
         self._bytes_per_sample = 2   # 2: bytes per sample (s16le)
         self._chunk_size = 100
         out_buff_size = (self._sample_rate * self._bytes_per_sample) // self._chunk_size
+        self._unpack_str = f'<{self._chunk_size//self._bytes_per_sample}h'
+
+        # _circ_buff holds last `rec_duration` of captured audio
         self._circ_buff = deque(maxlen=len * self._bytes_per_sample)
+        
+        # queue, to send chunks of chunk_size//2 to display captured audio in "roll mode"
         self._out_buff = deque(maxlen=out_buff_size*2)   # 2: safe margin
-        self._x = np.linspace(0,self._rec_duration,len).tolist()
+        
+        # array x for plotting the waveform:
+        self.x = np.linspace(0,self._rec_duration,len).tolist()
 
         # '-f lavfi -i "sine=frequency=880"'
         self._input_dev_str = f'-f pulse -i {input_device}'
@@ -129,14 +136,13 @@ class Recorder(RecorderBase):
             print('stderr_reader: ',e)
 
     def _reader(self):
-        unpack_str = f'<{self._chunk_size/self._bytes_per_sample}h'
         try:
             while self._recording:
-                #self._lock.acquire()
+                self._lock.acquire()
                 data = self._ffmpeg.stdout.read(self._chunk_size)
                 self._circ_buff.extend(data)
-                #self._out_buff.append(unpack(unpack_str,data))
-                #self._lock.release()
+                self._out_buff.append(data)
+                self._lock.release()
 
         except Exception as e:
             print(e)
@@ -152,16 +158,24 @@ class Recorder(RecorderBase):
 
     @property
     def np_circ_buff(self):
-        #self._lock.acquire()
+        """returns the content of the circular buffer as a 1D numpy array"""
         # '<i2': little endian 16-bit integer
         np_array = np.frombuffer(bytes(self._circ_buff),dtype='<i2')
-        #self._lock.release()
         return np_array
+
+    @property
+    def decoded_queue(self):
+        #self._lock.acquire()
+        try:
+            return unpack(self._unpack_str,self._out_buff.popleft())
+        except:
+            return None
+        #self._lock.release()
 
     @property
     def xy_buff(self):
         np_array = self.np_circ_buff
-        return self._x,np_array.flatten().tolist()
+        return self.x,np_array.flatten().tolist()
 
     def setDevice(self,device):
         pass
@@ -192,4 +206,10 @@ class Recorder(RecorderBase):
 if __name__ == "__main__":
     rec = Recorder('./datasets','1')
     #code.interact(local=dict(globals(),**locals()))
+    #print(rec.query_devices())
     rec.start()
+    while True:
+        try:
+            sys.stdout.buffer.write(rec._out_buff.popleft())
+        except:
+            pass
