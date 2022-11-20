@@ -1,5 +1,5 @@
 import code
-import sys,os
+import sys,time,os
 import subprocess
 import uuid
 from collections import deque
@@ -29,9 +29,6 @@ class RecorderBase():
         self._timer = Timer(0.1,self._start_timer)
         self._timer.start()
         self._elapsed += 0.1
-        if round(self._elapsed,2) % 1 == 0:
-            ...
-            #print('{:.04f}'.format(self._elapsed),end='\n',flush=True)
     
     def _start_reader(self):
         self._reader_thread = Thread(target=self._reader,args=())
@@ -83,9 +80,10 @@ class Recorder(RecorderBase):
         self._format = format
         len = self._rec_duration * self._sample_rate
         self._bytes_per_sample = 2   # 2: bytes per sample (s16le)
-        self._chunk_size = 100
+        self._chunk_size = 500
         out_buff_size = (self._sample_rate * self._bytes_per_sample) // self._chunk_size
         self._unpack_str = f'<{self._chunk_size//self._bytes_per_sample}h'
+        self._total_bytes = 0
 
         # _circ_buff holds last `rec_duration` of captured audio
         self._circ_buff = deque(maxlen=len * self._bytes_per_sample)
@@ -136,13 +134,15 @@ class Recorder(RecorderBase):
             print('stderr_reader: ',e)
 
     def _reader(self):
+        self._reader_start_t = time.time()
         try:
             while self._recording:
-                self._lock.acquire()
+                #self._lock.acquire()
                 data = self._ffmpeg.stdout.read(self._chunk_size)
+                self._total_bytes += self._chunk_size
                 self._circ_buff.extend(data)
                 self._out_buff.append(data)
-                self._lock.release()
+                #self._lock.release()
 
         except Exception as e:
             print(e)
@@ -152,6 +152,7 @@ class Recorder(RecorderBase):
             self._timer.cancel()
             self._recording = False
             self._elapsed = 0.0
+            self._total_bytes = 0
             self._ffmpeg.kill()
             self._reader_thread.join()
             #self._stderr_thread.join()
@@ -173,9 +174,21 @@ class Recorder(RecorderBase):
         #self._lock.release()
 
     @property
+    def decoded_chunk_size(self):
+        return self._chunk_size//self._bytes_per_sample
+
+    @property
     def xy_buff(self):
         np_array = self.np_circ_buff
         return self.x,np_array.flatten().tolist()
+
+    @property
+    def atr(self):
+        """average transfer rate"""
+        # average transfer rate should be about 31.2KiB/s @sample_rate=16000;s16le
+        #                                       86.1KiB/s @sample_rate=44100;s16le
+        delta_t = time.time() - self._reader_start_t
+        return round((self._total_bytes/delta_t)/1024,2)
 
     def setDevice(self,device):
         pass
@@ -210,6 +223,11 @@ if __name__ == "__main__":
     rec.start()
     while True:
         try:
-            sys.stdout.buffer.write(rec._out_buff.popleft())
+            out = rec._out_buff.popleft()
+            #sys.stdout.buffer.write(out)
+            if round(rec.elapsed,2) % 1 == 0:
+                    ...
+                    print(f'average transfer rate: {rec.atr}',end='\r',flush=True)
+                    #print('{:.04f}'.format(self._elapsed),end='\n',flush=True)
         except:
             pass

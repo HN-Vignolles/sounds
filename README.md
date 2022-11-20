@@ -1,4 +1,4 @@
-Tool for making small sound datasets. Once the recording backend starts, it can record fixed-length audio; and then update a data frame in CSV format. `sounddevice` is being used as a recording backend
+Tool for making small sound datasets. Once the recording backend starts, it can record fixed-length audio; and then update a data frame in CSV format. `ffmpeg` is being used as a recording backend
 
 # Install
 ```bash
@@ -11,6 +11,4 @@ python app.py
 ```
 
 # TODO
-- switch to `ffmpeg` backend
-- https://github.com/marketplace/actions/setup-ffmpeg
-- c.f. https://github.com/smirnov-am/flask-streaming
+- https://github.com/marketplace/actions/setup-ffmpeg plus sine wave test?

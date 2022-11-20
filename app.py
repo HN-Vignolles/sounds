@@ -1,6 +1,4 @@
 #!/usr/bin/env python
-#
-# based on https://github.com/sbartek/flask-with-plotly
 
 from flask import Flask, send_from_directory, render_template, request
 from flask_sock import Sock
@@ -45,9 +43,9 @@ def handle(ws):
             #if data == 'close':
             #    break
             if rec.is_recording():
-                y = rec.decoded_queue
-                if y:
-                    ws.send(json.dumps({'roll':{'y':y}}))
+                chunk = rec.decoded_queue
+                if chunk:
+                    ws.send(json.dumps({'roll':chunk}))
 
     except Exception as e:
         print(e)
@@ -56,6 +54,10 @@ def handle(ws):
 @app.route('/api/rec/x')
 def getX():
     return {'x':rec.x}
+
+@app.route('/api/rec/dcs')
+def getDcs():
+    return {'dcs':rec.decoded_chunk_size}
 
 @app.route('/api/rec',methods=['PUT'])
 def apiRec():
