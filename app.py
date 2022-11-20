@@ -19,8 +19,8 @@ if not samples_path.exists():
     samples_path.mkdir()
 
 
-input = {'format':'pulse','device':1}
-#input = {'format':'alsa','device':'hw:1'}
+#input = {'format':'pulse','device':1}
+input = {'format':'alsa','device':'hw:1'}
 rec = Recorder(samples_path,input,rec_duration=2,sample_rate=16000)
 devices = rec.query_devices()
 
@@ -44,26 +44,28 @@ def handle(ws):
                 chunk = rec.decoded_queue
                 if chunk:
                     ws.send(json.dumps({'roll':chunk}))
-                    val = abs(max(chunk))
-                    if val > vmax:
-                        vmax = val
-                    val = int(val*(160/vmax))
-                    pad = 160 - val
-                    bar = '#'*val + ' '*pad
-                    print(bar)
-                    print(vmax)
 
     except Exception as e:
         print(e)
     return ''
 
+
 @app.route('/api/rec/x')
 def getX():
     return {'x':rec.x}
 
+
 @app.route('/api/rec/dcs')
 def getDcs():
     return {'dcs':rec.decoded_chunk_size}
+
+
+@app.route('/api/table')
+def table():
+    fold = request.args.get('fold')
+    table = getTable(samples_path / 'samples.csv',fold)
+    return {'action':'table','fold':fold,'table':table}
+
 
 @app.route('/api/rec',methods=['PUT'])
 def apiRec():

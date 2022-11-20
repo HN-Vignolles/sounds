@@ -19,9 +19,6 @@
             max-height: 200px;
             overflow-y: auto;
         }
-        canvas {
-            border: 1px dashed black;
-        }
     </style>
 </head>
 
@@ -34,7 +31,7 @@
                     Start
                 </button>
             </div>
-            <div class="col-md-5">
+            <div class="col-md-2">
                 <div class="dropdown">
                     <button class="btn btn-info dropdown-toggle" type="button" id="devices" data-toggle="dropdown"
                         aria-haspopup="true" aria-expanded="false">
@@ -47,19 +44,21 @@
                         </button>
                         {% endfor %}
                     </div>
-                    <span id="input-device">Select Input Device</button>
                 </div>
+            </div>
+            <div class="col-md-2 text-truncate">
+                <span id="input-device">Select Input Device</span>
             </div>
         </div>
         <div class="row justify-content-md-center">
             <div class="col-md-7">
                 <fieldset>
                     <legend class="small">Save sound event (last 2s of buffer):</legend>
-                        <div>
-                            {% for event in events %}
-                            <button class="btn btn-primary m-1" id="{{event}}" onclick="save(this)">{{event}}</button>
-                            {% endfor %}
-                        </div>
+                    <div>
+                        {% for event in events %}
+                        <button class="btn btn-primary m-1" id="{{event}}" onclick="save(this)">{{event}}</button>
+                        {% endfor %}
+                    </div>
                 </fieldset>
             </div>
         </div>
@@ -67,17 +66,17 @@
             <div class="col-md-6">
                 <div class="input-group input-group-sm mb-3">
                     <div class="input-group-prepend">
-                      <span class="input-group-text" id="inputGroup-sizing-sm">
-                        Fold
-                    </span>
+                        <span class="input-group-text" id="inputGroup-sizing-sm">
+                            Fold
+                        </span>
                     </div>
-                    <input id="fold-input" type="text" class="form-control" 
-                        aria-label="Small" aria-describedby="inputGroup-sizing-sm" placeholder="1"/>
-                  </div>
+                    <input id="fold-input" type="text" class="form-control" aria-label="Small"
+                        aria-describedby="inputGroup-sizing-sm" placeholder="1" />
+                </div>
             </div>
         </div>
         <div class="row justify-content-md-center">
-            <div id="test-fig">
+            <div id="roll-container" class="bg-light">
                 <canvas id="roll"></canvas>
             </div>
         </div>
@@ -86,7 +85,7 @@
             </div>
         </div>
         <div class="row justify-content-md-center">
-            <div class="dropdown"  id="fold-dropdown-div">
+            <div class="dropdown" id="fold-dropdown-div">
                 <button class="btn btn-info dropdown-toggle" type="button" id="fold-dropdown" data-toggle="dropdown"
                     aria-haspopup="true" aria-expanded="false">
                     Fold:
@@ -112,7 +111,10 @@
                     </thead>
                     <tbody>
                         {% for row in table %}
-                        <tr><td>{{row[0]}}</td><td>{{row[1]}}</td></tr>
+                        <tr>
+                            <td>{{row[0]}}</td>
+                            <td>{{row[1]}}</td>
+                        </tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -120,73 +122,26 @@
         </div>
     </div>
     <!-- Optional JavaScript -->
+    <script src="{{ url_for('static',filename='controls.js') }}"></script>
     <script>
         let socket = new WebSocket('ws://' + window.location.host + '/ws')
         let dataTest = [{ "line": { "color": "blue" }, "x": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], "y": [-0.209590387511489, -0.20192923508006402, -0.125599795026844, 0.06877490143333401, 0.0061935846882860005, 0.019254895624578, -0.112608955560844, -0.15673144293375402, -0.13994229625173202, -0.040659162679208], "type": "scatter" }]
-        let folds = "{{folds}}".replace('{','').split(',').map(s => parseInt(s));
+        let folds = "{{folds}}".replace('{', '').split(',').map(s => parseInt(s));
 
         Plotly.plot('fig', [{}], { height: 250, margin: { t: 28, b: 28 }, yaxis: { range: [-2000, 2000] } });
-        let recording = false;
 
-        async function selectDevice(device) {
-            const res = await fetch('/api/rec', {
-                method: 'PUT',
-                body: JSON.stringify({ 'action': 'device', 'index': device.id })
-            });
-            const json = await res.json();
-            if(json['action'] === 'device'){
-                $('#toggle').prop('disabled',false);
-            }
-            $('#input-device').html(json['device']['name']);
-        }
-
-        async function getTable(fold){
-            const res = await fetch('/api/rec', {
-                method: 'PUT',
-                body: JSON.stringify({ 'action':'table', 'fold': fold.id })
-            });
-            const json = await res.json();
-            if(json['action'] === 'table'){
-                $('#fold-span').html(json['fold'])
-                makeTable('#df', json['table']);
-            }  
-        }
-
-        async function getX(){
+        async function getX() {
             // get X linspace
             const res = await fetch('/api/rec/x');
             const json = await res.json();
             return json['x'];
         }
 
-        async function getDcs(){
+        async function getDcs() {
             // get decoded chunk size
             const res = await fetch('/api/rec/dcs');
             const json = await res.json();
             return json['dcs'];
-        }
-
-        async function toggle() {
-            let action;
-            if (recording === false) {
-                action = 'start'
-            } else {
-                action = 'cancel'
-            }
-            const res = await fetch('/api/rec', {
-                method: 'PUT',
-                body: JSON.stringify({ 'action': action })
-            });
-            const json = await res.json()
-            if (json['action'] === 'start') {
-                $('#toggle').text('Cancel');
-                $('#toggle').removeClass('btn-success').addClass('btn-danger');
-                recording = true;
-            } else if (json['action'] === 'cancel') {
-                $('#toggle').text('Start');
-                $('#toggle').removeClass('btn-danger').addClass('btn-success');
-                recording = false;
-            }
         }
 
         async function save(element) {
@@ -194,7 +149,7 @@
                 let fold;
                 fold = $('#fold-input').val();
                 fold = parseInt(fold || 1);
-                
+
                 const res = await fetch('/api/rec', {
                     method: 'PUT',
                     body: JSON.stringify({ 'action': 'save', 'event': element.id, 'fold': fold })
@@ -204,100 +159,72 @@
                     $('#toggle').text('Start');
                     $('#toggle').removeClass('btn-danger').addClass('btn-success');
                     $('#fold-span').html(json['fold']);
-                    if(!folds.includes(fold)){
+                    if (!folds.includes(fold)) {
                         folds.push(fold);
-                        updateFolds('#fold-dropdown-div',folds,fold);
+                        updateFolds('#fold-dropdown-div', folds, fold);
                     }
                     makeTable('#df', json['table']);
                     recording = false;
                 }
-                Plotly.update('fig', { x: [json['x']], y: [json['y']] }, {xaxis:{ticksuffix:"s"}});
+                Plotly.update('fig', { x: [json['x']], y: [json['y']] }, { xaxis: { ticksuffix: "s" } });
             }
         }
 
-        function makeTable(id, values) {
-            let inner_html = '<table class="table table-sm small">';
-            inner_html += '<thead><tr><th scope="col">Category</th><th scope="col">Samples</th></tr></thead>';
-            inner_html += '<tbody>';
-            values.forEach((e) => {
-                inner_html += '<tr><td>' + e[0] + '</td><td>' + e[1] + '</td></tr>'
-            });
-            inner_html += '</tbody></table>';
-            $(id).html(inner_html);
-        }
-
-        function updateFolds(id,values) {
-            let inner_html = '<button class="btn btn-info dropdown-toggle" type="button" \
-                id="fold-dropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Fold:</button>';
-            inner_html += '<div class="dropdown-menu" aria-labelledby="devices">';
-            values.forEach((e) => {
-                inner_html += '<button class="dropdown-item" type="button" id="'
-                                + e + '" onclick="getTable(this)">' + e + '</button>';
-            });
-            inner_html += '</div><span id="fold-span" class="ml-2">'+ fold + '</span>';
-            $(id).html(inner_html);
-        }
-        
         let first_chunk_time = 0;
         let total_bytes = 0;
         let X;
         let Y = [];
-        async function initCanvas(id){
+        async function initCanvas(id) {
             let fig = document.getElementById(id);
             let ctx = fig.getContext('2d');
             let cw = fig.width = 500;
-            let ch = fig.height = 250;
-
-            let testY = [-5,-13,-28,-18,-22,-36,-36,-38,-22,0,-4,-13,-12,-32,-36,-10,
-                        -19,-20,18,39,26,12,10,14,19,8,-12,-30,-24,2,-3,-15,-17,-16,-9,
-                        -2,5,-5,-11,6,7,1,18,19,-9,2,19,20,0,-4];
-            let testY2 = [-5,-13,-28,-18,-22,-36,-36,-38,-22,0,5,13,12,32,36,10,
-                        19,20,18,39,26,12,10,14,19,8,-12,-30,-24,2,-3,-15,-17,-16,-9,
-                        -2,5,-5,-11,6,7,1,18,19,-9,2,19,20,0,-4];
+            let ch = fig.height = 180;
 
             X = await getX();
             let xLength = X.length;
             let chunkLength = await getDcs();
-            let xStep = cw/xLength;
-            let yAxisPos = ch/2;
+            let xStep = cw / xLength;
+            let yAxisPos = ch / 2;
+            let yScale = ch/65536;
 
-            function drawAxes(){
+            function drawAxes() {
                 ctx.beginPath();
-                ctx.moveTo(cw,yAxisPos);
-                ctx.lineTo(0,yAxisPos);
+                ctx.moveTo(cw, yAxisPos);
+                ctx.lineTo(0, yAxisPos);
                 ctx.stroke();
             }
-            function plot(Y){
+            function plot(Y) {
                 let x = 0;
-                ctx.clearRect(0,0,cw,ch);
+                ctx.clearRect(0, 0, cw, ch);
+                ctx.strokeStyle = 'rgba(21,71,52,0.5)'
                 //drawAxes();
                 ctx.beginPath();
-                ctx.moveTo(0,yAxisPos - Y[0]);
-                for(let i=0;i<Y.length;i+=100){
-                    ctx.lineTo(x,yAxisPos - Y[i])
-                    x+=xStep*100;
+                ctx.moveTo(0, yAxisPos - yScale*Y[0]);
+                for (let i = 0; i < Y.length; i += 10) {
+                    ctx.lineTo(x, yAxisPos - yScale*Y[i])
+                    x += xStep * 10;
                 }
                 ctx.stroke();
             }
-            
+
             console.log(`chunkLength: ${chunkLength}`);
             socket.onmessage = event => {
                 st = 0
                 message = JSON.parse(event.data);
-                if(message['roll'] !== undefined){
-                    if(first_chunk_time === 0){
-                        first_chunk_time = (new Date()).getTime()/1000;
+                if (message['roll'] !== undefined) {
+                    if (first_chunk_time === 0) {
+                        first_chunk_time = (new Date()).getTime() / 1000;
                     }
                     tailY = message['roll'];
-                    if(Y.length >= xLength){
-                        Y.splice(0,chunkLength);
+                    if (Y.length >= xLength) {
+                        Y.splice(0, chunkLength);
                     }
                     Y.push(...tailY);
-                    total_bytes += chunkLength*2
-                    if(st==0){
+                    total_bytes += chunkLength * 2
+                    if (st == 0) {
                         //plot(Y);
                     }
-                    if(st > 20){
+                    if (st > 20) {
                         st = 0;
                     } else {
                         st++;
@@ -306,17 +233,17 @@
                 }
             };
             setInterval(() => {
-                if(recording===true){
+                if (recording === true) {
                     plot(Y);
                 }
             }, 20);
         }
         initCanvas('roll');
         setInterval(() => {
-            if(recording===true){
-                now = (new Date()).getTime()/1000;
+            if (recording === true) {
+                now = (new Date()).getTime() / 1000;
                 delta_t = now - first_chunk_time;
-                average = (total_bytes/delta_t)/1024;
+                average = (total_bytes / delta_t) / 1024;
                 console.log(`average transfer rate: ${average}`);
                 //Plotly.update('fig',{ x:[X],y:[Y] },{});
             }
