@@ -19,8 +19,10 @@ if not samples_path.exists():
     samples_path.mkdir()
 
 
-rec = Recorder(samples_path,'1',rec_duration=2,sample_rate=16000)
-devices = [d for d in rec.query_devices()]
+input = {'format':'pulse','device':1}
+#input = {'format':'alsa','device':'hw:1'}
+rec = Recorder(samples_path,input,rec_duration=2,sample_rate=16000)
+devices = rec.query_devices()
 
 
 @app.route('/')
@@ -34,18 +36,22 @@ def base():
 @sock.route('/ws')
 def handle(ws):
     print('New WebSocket client')
+    vmax = 1
     try:
         while True:
             #data = ws.receive()
-            #if data == 'roll' and rec.is_recording:
-            #    y = rec.decoded_queue
-            #    ws.send(json.dumps({'roll': {'y':y}}))
-            #if data == 'close':
-            #    break
             if rec.is_recording():
                 chunk = rec.decoded_queue
                 if chunk:
                     ws.send(json.dumps({'roll':chunk}))
+                    val = abs(max(chunk))
+                    if val > vmax:
+                        vmax = val
+                    val = int(val*(160/vmax))
+                    pad = 160 - val
+                    bar = '#'*val + ' '*pad
+                    print(bar)
+                    print(vmax)
 
     except Exception as e:
         print(e)
@@ -69,8 +75,8 @@ def apiRec():
     elif action == 'device':
         # select device
         device_index = request.get_json(force=True)['index']
-        print(f'device_index: {device_index}')
-        device = [i for i in devices if i['index']==int(device_index)][0]
+        device = [i for i in devices if i['index']==device_index][0]
+        print(f'device: {device}')
         rec.setDevice(device['name'])
         return {'action':'device','device':device}
 

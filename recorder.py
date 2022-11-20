@@ -59,18 +59,13 @@ class RecorderBase():
         return self._elapsed
 
 
-# name == 'posix':
-import pulsectl
-
-# TODO: set volume (pulsectl)
-
 class Recorder(RecorderBase):
-    def __init__(self,data_path,input_device,
+    def __init__(self,data_path,input,
                  rec_duration=2,sample_rate=44100,format='s16le'):
         super().__init__(rec_duration,sample_rate)
 
-        if not input_device:
-            raise ValueError("input_device must be supplied")
+        if not input:
+            raise ValueError("input must be supplied")
         if not data_path:
             raise ValueError("data_path must be supplied")
         if format not in ['s16le']:
@@ -80,7 +75,7 @@ class Recorder(RecorderBase):
         self._format = format
         len = self._rec_duration * self._sample_rate
         self._bytes_per_sample = 2   # 2: bytes per sample (s16le)
-        self._chunk_size = 500
+        self._chunk_size = 100
         out_buff_size = (self._sample_rate * self._bytes_per_sample) // self._chunk_size
         self._unpack_str = f'<{self._chunk_size//self._bytes_per_sample}h'
         self._total_bytes = 0
@@ -95,7 +90,9 @@ class Recorder(RecorderBase):
         self.x = np.linspace(0,self._rec_duration,len).tolist()
 
         # '-f lavfi -i "sine=frequency=880"'
-        self._input_dev_str = f'-f pulse -i {input_device}'
+        self._input_fmt = input['format']
+        self._input_dev = input['device']
+        self._input_dev_str = f"-f {self._input_fmt} -ac 1 -i {self._input_dev}"
         self.ffmpeg_cmd = f"/usr/bin/ffmpeg -re {self._input_dev_str} \
                             -ar {sample_rate} -ac 1 -f {self._format} -blocksize 1000 -flush_packets 1 -".split()
         self._lock = Lock()
@@ -195,11 +192,24 @@ class Recorder(RecorderBase):
         #sd.default.device = device
 
     def query_devices(self):
-        pulse = pulsectl.Pulse('client')
-        sources = pulse.source_list()
-        s_dict = [{'index':source.index,'name':source.proplist['alsa.long_card_name']} for source in sources]
-        pulse.close()
-        return s_dict
+        if self._input_fmt == 'pulse':
+            import pulsectl
+            pulse = pulsectl.Pulse('client')
+            sources = pulse.source_list()
+            s_dict = [{'index':f'{source.index}','name':source.proplist['alsa.long_card_name']} for source in sources]
+            pulse.close()
+            return s_dict
+        elif self._input_fmt == 'alsa':
+            import re
+            arecordl = subprocess.Popen(['arecord','-l'],stdout=subprocess.PIPE)
+            s_dict = []
+            index = 0
+            for line in arecordl.stdout.readlines():
+                s = re.match('card ([0-9]+).*?\[([^\]]*)].*?device ([0-9]+).*?\[([^\]]*)]',line.decode('utf-8'),re.IGNORECASE)
+                if s:
+                    s_dict.append({'index':f'{index}','hw':f'hw:{s.group(1)},{s.group(3)}','name':f'{s.group(2)} - {s.group(4)}'})
+                    index += 1
+            return s_dict
 
     def save(self,name,fold):
         if self._timer and self._recording:
@@ -217,7 +227,7 @@ class Recorder(RecorderBase):
             return self.xy_buff
 
 if __name__ == "__main__":
-    rec = Recorder('./datasets','1')
+    rec = Recorder('./datasets',{'format':'pulse','device':1})
     #code.interact(local=dict(globals(),**locals()))
     #print(rec.query_devices())
     rec.start()

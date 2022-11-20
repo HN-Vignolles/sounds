@@ -240,21 +240,22 @@
         
         let first_chunk_time = 0;
         let total_bytes = 0;
+        let X;
+        let Y = [];
         async function initCanvas(id){
             let fig = document.getElementById(id);
             let ctx = fig.getContext('2d');
             let cw = fig.width = 500;
             let ch = fig.height = 250;
 
-            let Y = [];
             let testY = [-5,-13,-28,-18,-22,-36,-36,-38,-22,0,-4,-13,-12,-32,-36,-10,
                         -19,-20,18,39,26,12,10,14,19,8,-12,-30,-24,2,-3,-15,-17,-16,-9,
                         -2,5,-5,-11,6,7,1,18,19,-9,2,19,20,0,-4];
             let testY2 = [-5,-13,-28,-18,-22,-36,-36,-38,-22,0,5,13,12,32,36,10,
                         19,20,18,39,26,12,10,14,19,8,-12,-30,-24,2,-3,-15,-17,-16,-9,
                         -2,5,-5,-11,6,7,1,18,19,-9,2,19,20,0,-4];
-            
-            let X = await getX();
+
+            X = await getX();
             let xLength = X.length;
             let chunkLength = await getDcs();
             let xStep = cw/xLength;
@@ -272,9 +273,9 @@
                 //drawAxes();
                 ctx.beginPath();
                 ctx.moveTo(0,yAxisPos - Y[0]);
-                for(let y of Y){
-                    ctx.lineTo(x,yAxisPos - y)
-                    x+=xStep;
+                for(let i=0;i<Y.length;i+=100){
+                    ctx.lineTo(x,yAxisPos - Y[i])
+                    x+=xStep*100;
                 }
                 ctx.stroke();
             }
@@ -304,6 +305,11 @@
                     //plot(Y);
                 }
             };
+            setInterval(() => {
+                if(recording===true){
+                    plot(Y);
+                }
+            }, 20);
         }
         initCanvas('roll');
         setInterval(() => {
@@ -312,6 +318,7 @@
                 delta_t = now - first_chunk_time;
                 average = (total_bytes/delta_t)/1024;
                 console.log(`average transfer rate: ${average}`);
+                //Plotly.update('fig',{ x:[X],y:[Y] },{});
             }
         }, 250);
     </script>
