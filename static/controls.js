@@ -17,7 +17,7 @@ async function getTable(fold) {
         fold: fold.id
     }));
     const json = await res.json();
-    if (json['action'] === 'table') {
+    if (json['table'] !== undefined) {
         $('#fold-span').html(json['fold'])
         makeTable('#df', json['table']);
     }

@@ -128,20 +128,13 @@
         let dataTest = [{ "line": { "color": "blue" }, "x": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], "y": [-0.209590387511489, -0.20192923508006402, -0.125599795026844, 0.06877490143333401, 0.0061935846882860005, 0.019254895624578, -0.112608955560844, -0.15673144293375402, -0.13994229625173202, -0.040659162679208], "type": "scatter" }]
         let folds = "{{folds}}".replace('{', '').split(',').map(s => parseInt(s));
 
-        Plotly.plot('fig', [{}], { height: 250, margin: { t: 28, b: 28 }, yaxis: { range: [-2000, 2000] } });
-
-        async function getX() {
-            // get X linspace
-            const res = await fetch('/api/rec/x');
+        async function getMediaInfo(){
+            const res = await fetch('/api/info');
             const json = await res.json();
-            return json['x'];
-        }
-
-        async function getDcs() {
-            // get decoded chunk size
-            const res = await fetch('/api/rec/dcs');
-            const json = await res.json();
-            return json['dcs'];
+            // X: linspace
+            // dcs: decoded chunk size
+            // atr: average transfer rate (backend)
+            return json;
         }
 
         async function save(element) {
@@ -166,13 +159,12 @@
                     makeTable('#df', json['table']);
                     recording = false;
                 }
-                Plotly.update('fig', { x: [json['x']], y: [json['y']] }, { xaxis: { ticksuffix: "s" } });
+                //Plotly.update('fig', { x: [json['x']], y: [json['y']] }, { xaxis: { ticksuffix: "s" } });
             }
         }
 
         let first_chunk_time = 0;
         let total_bytes = 0;
-        let X;
         let Y = [];
         async function initCanvas(id) {
             let fig = document.getElementById(id);
@@ -180,9 +172,10 @@
             let cw = fig.width = 500;
             let ch = fig.height = 180;
 
-            X = await getX();
+            let media = await getMediaInfo();
+            let chunkLength = media['dcs'];
+            let X = media['x'];
             let xLength = X.length;
-            let chunkLength = await getDcs();
             let xStep = cw / xLength;
             let yAxisPos = ch / 2;
             let yScale = ch/65536;
@@ -207,9 +200,7 @@
                 ctx.stroke();
             }
 
-            console.log(`chunkLength: ${chunkLength}`);
             socket.onmessage = event => {
-                st = 0
                 message = JSON.parse(event.data);
                 if (message['roll'] !== undefined) {
                     if (first_chunk_time === 0) {
@@ -221,15 +212,6 @@
                     }
                     Y.push(...tailY);
                     total_bytes += chunkLength * 2
-                    if (st == 0) {
-                        //plot(Y);
-                    }
-                    if (st > 20) {
-                        st = 0;
-                    } else {
-                        st++;
-                    }
-                    //plot(Y);
                 }
             };
             setInterval(() => {
@@ -244,7 +226,7 @@
                 now = (new Date()).getTime() / 1000;
                 delta_t = now - first_chunk_time;
                 average = (total_bytes / delta_t) / 1024;
-                console.log(`average transfer rate: ${average}`);
+                //console.log(`average transfer rate: ${average}`);
                 //Plotly.update('fig',{ x:[X],y:[Y] },{});
             }
         }, 250);

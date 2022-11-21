@@ -5,7 +5,7 @@ import uuid
 from collections import deque
 from struct import unpack
 from pathlib import Path
-from threading import Lock, Thread, Timer
+from threading import Lock, Thread
 
 import numpy as np
 import pandas as pd
@@ -22,13 +22,6 @@ class RecorderBase():
         self._sample_rate = sample_rate
         self._last = ''
         self._recording = False
-        self._elapsed = 0.0
-        self._timer = None
-
-    def _start_timer(self):
-        self._timer = Timer(0.1,self._start_timer)
-        self._timer.start()
-        self._elapsed += 0.1
     
     def _start_reader(self):
         self._reader_thread = Thread(target=self._reader,args=())
@@ -53,10 +46,6 @@ class RecorderBase():
     
     def is_recording(self):
         return self._recording
-
-    @property
-    def elapsed(self):
-        return self._elapsed
 
 
 class Recorder(RecorderBase):
@@ -113,7 +102,6 @@ class Recorder(RecorderBase):
             if not stdout_peek:
                 raise RuntimeError("ffmpeg cmd doesn't return any data")
             self._recording = True
-            self._start_timer()
             self._start_reader()
             #self._start_stderr_reader()
 
@@ -146,9 +134,7 @@ class Recorder(RecorderBase):
     
     def cancel(self):
         if self._recording:
-            self._timer.cancel()
             self._recording = False
-            self._elapsed = 0.0
             self._total_bytes = 0
             self._ffmpeg.kill()
             self._reader_thread.join()
@@ -162,7 +148,7 @@ class Recorder(RecorderBase):
         return np_array
 
     @property
-    def decoded_queue(self):
+    def decoded_chunk(self):
         #self._lock.acquire()
         try:
             return unpack(self._unpack_str,self._out_buff.popleft())
@@ -172,6 +158,10 @@ class Recorder(RecorderBase):
 
     @property
     def decoded_chunk_size(self):
+        """The output from ffmpeg is inserted into the recording buffer (circular)
+        in chunks of `_chunk_size`, and in turn placed in an output queue
+        for plotting purposes. This value is the size of the already decoded chunks,
+        e.g. 50 in case of int16 format, chunk_size=100 bytes"""
         return self._chunk_size//self._bytes_per_sample
 
     @property
@@ -184,8 +174,11 @@ class Recorder(RecorderBase):
         """average transfer rate"""
         # average transfer rate should be about 31.2KiB/s @sample_rate=16000;s16le
         #                                       86.1KiB/s @sample_rate=44100;s16le
-        delta_t = time.time() - self._reader_start_t
-        return round((self._total_bytes/delta_t)/1024,2)
+        if self._recording:
+            delta_t = time.time() - self._reader_start_t
+            return round((self._total_bytes/delta_t)/1024,2)
+        else:
+            return 0
 
     def setDevice(self,device):
         pass
@@ -212,10 +205,9 @@ class Recorder(RecorderBase):
             return s_dict
 
     def save(self,name,fold):
-        if self._timer and self._recording:
-            self._timer.cancel()
+        if self._recording:
             self._recording = False
-            self._elapsed = 0
+            self._ffmpeg.kill()
             filename = f'{name}-{uuid.uuid4()}.wav'
             np_sample = self.np_circ_buff
             sf.write(self.data_path / filename,np_sample,samplerate=self._sample_rate,subtype='PCM_16')
@@ -235,9 +227,5 @@ if __name__ == "__main__":
         try:
             out = rec._out_buff.popleft()
             #sys.stdout.buffer.write(out)
-            if round(rec.elapsed,2) % 1 == 0:
-                    ...
-                    print(f'average transfer rate: {rec.atr}',end='\r',flush=True)
-                    #print('{:.04f}'.format(self._elapsed),end='\n',flush=True)
         except:
             pass

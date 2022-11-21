@@ -35,13 +35,11 @@ def base():
 
 @sock.route('/ws')
 def handle(ws):
-    print('New WebSocket client')
-    vmax = 1
     try:
         while True:
             #data = ws.receive()
             if rec.is_recording():
-                chunk = rec.decoded_queue
+                chunk = rec.decoded_chunk
                 if chunk:
                     ws.send(json.dumps({'roll':chunk}))
 
@@ -50,21 +48,18 @@ def handle(ws):
     return ''
 
 
-@app.route('/api/rec/x')
-def getX():
-    return {'x':rec.x}
-
-
-@app.route('/api/rec/dcs')
-def getDcs():
-    return {'dcs':rec.decoded_chunk_size}
+@app.route('/api/info')
+def get_media_info():
+    return {'atr':rec.atr,
+            'dcs':rec.decoded_chunk_size,
+            'x':rec.x }
 
 
 @app.route('/api/table')
-def table():
+def get_table():
     fold = request.args.get('fold')
     table = getTable(samples_path / 'samples.csv',fold)
-    return {'action':'table','fold':fold,'table':table}
+    return {'fold':fold,'table':table}
 
 
 @app.route('/api/rec',methods=['PUT'])
@@ -78,18 +73,12 @@ def apiRec():
         # select device
         device_index = request.get_json(force=True)['index']
         device = [i for i in devices if i['index']==device_index][0]
-        print(f'device: {device}')
         rec.setDevice(device['name'])
         return {'action':'device','device':device}
 
     elif action == 'cancel':
         rec.cancel()
         return {'action':'cancel'}
-    
-    elif action == 'table':
-        fold = request.get_json(force=True)['fold']
-        table = getTable(samples_path / 'samples.csv',fold)
-        return {'action':'table','fold':fold,'table':table}
 
     elif action == 'save':
         req = request.get_json(force=True)
