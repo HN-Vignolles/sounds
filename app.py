@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-from flask import Flask, send_from_directory, render_template, request
+from flask import Flask
+from flask import send_from_directory,render_template, request, make_response, jsonify
 from flask_sock import Sock
 import json, os
 from recorder import Recorder
@@ -47,12 +48,16 @@ def handle(ws):
         print(e)
     return ''
 
+@app.route('/datasets/<path:name>')
+def send_sample(name):
+    return send_from_directory(samples_path,name)
 
 @app.route('/api/info')
 def get_media_info():
-    return {'atr':rec.atr,
+    data = {'atr':rec.atr,
             'dcs':rec.decoded_chunk_size,
             'x':rec.x }
+    return data
 
 
 @app.route('/api/table')
@@ -84,9 +89,9 @@ def apiRec():
         req = request.get_json(force=True)
         name = req.get('event','unnamed-event')
         fold = req.get('fold','1') or '1'
-        x,y = rec.save(name,fold)
+        filename = rec.save(name,fold)
         table = getTable(samples_path / 'samples.csv',fold)
-        return {'action':'save','x':x,'y':y,'table':table,'fold':fold}
+        return {'action':'save','filename':filename,'table':table,'fold':fold}
 
     else:
         return "Bad request",400

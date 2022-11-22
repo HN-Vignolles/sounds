@@ -14,13 +14,14 @@ import soundfile as sf
 
 df_columns = ['filename','target','category','fold']
 pd.set_option('max_colwidth',None)
-
+formats = {
+    's16le':{'bytes_per_sample':2,'ffmpeg_str':'s16le','unpack':['<','h']}
+}
 
 class RecorderBase():
     def __init__(self,rec_duration,sample_rate):
         self._rec_duration = rec_duration
         self._sample_rate = sample_rate
-        self._last = ''
         self._recording = False
     
     def _start_reader(self):
@@ -35,7 +36,7 @@ class RecorderBase():
         """stop recording without saving (backend)"""
 
     def _reader(self):
-        """reader thread to read from the
+        """reader thread for reading from the
         ffmpeg stdout into a deque"""
 
     def query_devices(self):
@@ -50,23 +51,24 @@ class RecorderBase():
 
 class Recorder(RecorderBase):
     def __init__(self,data_path,input,
-                 rec_duration=2,sample_rate=44100,format='s16le'):
+                 rec_duration=2,sample_rate=44100,output_format='s16le'):
         super().__init__(rec_duration,sample_rate)
 
         if not input:
             raise ValueError("input must be supplied")
         if not data_path:
             raise ValueError("data_path must be supplied")
-        if format not in ['s16le']:
+        if output_format not in ['s16le']:
             # TODO: add 'f32le'
-            raise ValueError(f"{format} not implemented yet")
+            raise ValueError(f"{output_format} not implemented yet")
         
-        self._format = format
-        len = self._rec_duration * self._sample_rate
-        self._bytes_per_sample = 2   # 2: bytes per sample (s16le)
+        self._bytes_per_sample = formats[output_format]['bytes_per_sample']
+        self._ffmpeg_str = formats[output_format]['ffmpeg_str']
         self._chunk_size = 100
+        self._unpack_str = self._get_unpack_str()
+        
+        len = self._rec_duration * self._sample_rate
         out_buff_size = (self._sample_rate * self._bytes_per_sample) // self._chunk_size
-        self._unpack_str = f'<{self._chunk_size//self._bytes_per_sample}h'
         self._total_bytes = 0
 
         # _circ_buff holds last `rec_duration` of captured audio
@@ -75,7 +77,7 @@ class Recorder(RecorderBase):
         # queue, to send chunks of chunk_size//2 to display captured audio in "roll mode"
         self._out_buff = deque(maxlen=out_buff_size*2)   # 2: safe margin
         
-        # array x for plotting the waveform:
+        # array x (coordinates) for plotting the waveform:
         self.x = np.linspace(0,self._rec_duration,len).tolist()
 
         # '-f lavfi -i "sine=frequency=880"'
@@ -83,7 +85,7 @@ class Recorder(RecorderBase):
         self._input_dev = input['device']
         self._input_dev_str = f"-f {self._input_fmt} -ac 1 -i {self._input_dev}"
         self.ffmpeg_cmd = f"/usr/bin/ffmpeg -re {self._input_dev_str} \
-                            -ar {sample_rate} -ac 1 -f {self._format} -blocksize 1000 -flush_packets 1 -".split()
+                            -ar {sample_rate} -ac 1 -f {self._ffmpeg_str} -blocksize 1000 -flush_packets 1 -".split()
         self._lock = Lock()
         self.data_path = Path(data_path)
         self.df_csv = self.data_path / 'samples.csv'
@@ -140,6 +142,15 @@ class Recorder(RecorderBase):
             self._reader_thread.join()
             #self._stderr_thread.join()
 
+    def _get_unpack_str(self):
+        """get the unpack string used by `struct.unpack()`
+        e.g. if we read chunks of 100 bytes from the ffmpeg output in little endian 16bit format,
+        the method `decoded_chunk` needs to decode 50 values of 2-bytes, using the string: `<50h`
+        <: little endian; h: 2-byte integer"""
+        return (formats[self._ffmpeg_str]['unpack'][0]
+                + str(self.decoded_chunk_size)
+                + formats[self._ffmpeg_str]['unpack'][1])
+
     @property
     def np_circ_buff(self):
         """returns the content of the circular buffer as a 1D numpy array"""
@@ -166,6 +177,7 @@ class Recorder(RecorderBase):
 
     @property
     def xy_buff(self):
+        """return two lists corresponding to the X and Y coordinates of the waveform"""
         np_array = self.np_circ_buff
         return self.x,np_array.flatten().tolist()
 
@@ -215,8 +227,7 @@ class Recorder(RecorderBase):
             s = pd.Series([filename,-1,name,fold],index=df_columns)
             df = pd.concat([df, s.to_frame().T])
             df.to_csv(self.df_csv,index=False)
-            self._last = filename
-            return self.xy_buff
+            return filename
 
 if __name__ == "__main__":
     rec = Recorder('./datasets',{'format':'pulse','device':1})

@@ -46,6 +46,39 @@ async function toggle() {
     }
 }
 
+async function save(element) {
+    if (recording === true) {
+        let fold;
+        fold = $('#fold-input').val();
+        fold = parseInt(fold || 1);
+
+        const res = await fetch('/api/rec', {
+            method: 'PUT',
+            body: JSON.stringify({ 'action': 'save', 'event': element.id, 'fold': fold })
+        });
+        const json = await res.json()
+        if (json['action'] === 'save') {
+            $('#toggle').text('Start');
+            $('#toggle').removeClass('btn-danger').addClass('btn-success');
+            $('#fold-span').html(json['fold']);
+            if (!folds.includes(fold)) {
+                folds.push(fold);
+                updateFolds('#fold-dropdown-div', folds, fold);
+            }
+            makeTable('#df', json['table']);
+            makeAudioPlayer('#player',json['filename'])
+            recording = false;
+        }
+        //Plotly.update('fig', { x: [json['x']], y: [json['y']] }, { xaxis: { ticksuffix: "s" } });
+    }
+}
+
+function makeAudioPlayer(id,filename){
+    let inner_html = '<figure><figcaption>Last sample: </figcaption>';
+    inner_html += '<audio src="/datasets/' + filename + '" controls preload="auto"></audio></figure>';
+    $(id).html(inner_html);
+}
+
 function makeTable(id, values) {
     let inner_html = '<table class="table table-sm small">';
     inner_html += '<thead><tr><th scope="col">Category</th><th scope="col">Samples</th></tr></thead>';

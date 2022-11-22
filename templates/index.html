@@ -46,7 +46,7 @@
                     </div>
                 </div>
             </div>
-            <div class="col-md-2 text-truncate">
+            <div class="col-md-3 text-truncate">
                 <span id="input-device">Select Input Device</span>
             </div>
         </div>
@@ -79,6 +79,8 @@
             <div id="roll-container" class="bg-light">
                 <canvas id="roll"></canvas>
             </div>
+        </div>
+        <div class="row justify-content-md-center py-2" id="player">
         </div>
         <div class="row justify-content-md-center py-3">
             <div class="chart" id="fig">
@@ -123,113 +125,9 @@
     </div>
     <!-- Optional JavaScript -->
     <script src="{{ url_for('static',filename='controls.js') }}"></script>
+    <script src="{{ url_for('static',filename='plot.js' ) }}"></script>
     <script>
-        let socket = new WebSocket('ws://' + window.location.host + '/ws')
-        let dataTest = [{ "line": { "color": "blue" }, "x": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], "y": [-0.209590387511489, -0.20192923508006402, -0.125599795026844, 0.06877490143333401, 0.0061935846882860005, 0.019254895624578, -0.112608955560844, -0.15673144293375402, -0.13994229625173202, -0.040659162679208], "type": "scatter" }]
         let folds = "{{folds}}".replace('{', '').split(',').map(s => parseInt(s));
-
-        async function getMediaInfo(){
-            const res = await fetch('/api/info');
-            const json = await res.json();
-            // X: linspace
-            // dcs: decoded chunk size
-            // atr: average transfer rate (backend)
-            return json;
-        }
-
-        async function save(element) {
-            if (recording === true) {
-                let fold;
-                fold = $('#fold-input').val();
-                fold = parseInt(fold || 1);
-
-                const res = await fetch('/api/rec', {
-                    method: 'PUT',
-                    body: JSON.stringify({ 'action': 'save', 'event': element.id, 'fold': fold })
-                });
-                const json = await res.json()
-                if (json['action'] === 'save') {
-                    $('#toggle').text('Start');
-                    $('#toggle').removeClass('btn-danger').addClass('btn-success');
-                    $('#fold-span').html(json['fold']);
-                    if (!folds.includes(fold)) {
-                        folds.push(fold);
-                        updateFolds('#fold-dropdown-div', folds, fold);
-                    }
-                    makeTable('#df', json['table']);
-                    recording = false;
-                }
-                //Plotly.update('fig', { x: [json['x']], y: [json['y']] }, { xaxis: { ticksuffix: "s" } });
-            }
-        }
-
-        let first_chunk_time = 0;
-        let total_bytes = 0;
-        let Y = [];
-        async function initCanvas(id) {
-            let fig = document.getElementById(id);
-            let ctx = fig.getContext('2d');
-            let cw = fig.width = 500;
-            let ch = fig.height = 180;
-
-            let media = await getMediaInfo();
-            let chunkLength = media['dcs'];
-            let X = media['x'];
-            let xLength = X.length;
-            let xStep = cw / xLength;
-            let yAxisPos = ch / 2;
-            let yScale = ch/65536;
-
-            function drawAxes() {
-                ctx.beginPath();
-                ctx.moveTo(cw, yAxisPos);
-                ctx.lineTo(0, yAxisPos);
-                ctx.stroke();
-            }
-            function plot(Y) {
-                let x = 0;
-                ctx.clearRect(0, 0, cw, ch);
-                ctx.strokeStyle = 'rgba(21,71,52,0.5)'
-                //drawAxes();
-                ctx.beginPath();
-                ctx.moveTo(0, yAxisPos - yScale*Y[0]);
-                for (let i = 0; i < Y.length; i += 10) {
-                    ctx.lineTo(x, yAxisPos - yScale*Y[i])
-                    x += xStep * 10;
-                }
-                ctx.stroke();
-            }
-
-            socket.onmessage = event => {
-                message = JSON.parse(event.data);
-                if (message['roll'] !== undefined) {
-                    if (first_chunk_time === 0) {
-                        first_chunk_time = (new Date()).getTime() / 1000;
-                    }
-                    tailY = message['roll'];
-                    if (Y.length >= xLength) {
-                        Y.splice(0, chunkLength);
-                    }
-                    Y.push(...tailY);
-                    total_bytes += chunkLength * 2
-                }
-            };
-            setInterval(() => {
-                if (recording === true) {
-                    plot(Y);
-                }
-            }, 20);
-        }
-        initCanvas('roll');
-        setInterval(() => {
-            if (recording === true) {
-                now = (new Date()).getTime() / 1000;
-                delta_t = now - first_chunk_time;
-                average = (total_bytes / delta_t) / 1024;
-                //console.log(`average transfer rate: ${average}`);
-                //Plotly.update('fig',{ x:[X],y:[Y] },{});
-            }
-        }, 250);
     </script>
     <!-- jQuery first, then Popper.js, then Bootstrap JS -->
     <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
