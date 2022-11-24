@@ -5,21 +5,25 @@ async function selectDevice(device) {
         method: 'PUT',
         body: JSON.stringify({ 'action': 'device', 'index': device.id })
     });
-    const json = await res.json();
-    if (json['action'] === 'device') {
-        $('#toggle').prop('disabled', false);
+    if (res.ok) {
+        const json = await res.json();
+        if (json['device'] !== undefined) {
+            $('#toggle').prop('disabled', false);
+            $('#input-device').html(json['device']['name']);
+        }
     }
-    $('#input-device').html(json['device']['name']);
 }
 
 async function getTable(fold) {
     const res = await fetch('/api/table?' + new URLSearchParams({
         fold: fold.id
     }));
-    const json = await res.json();
-    if (json['table'] !== undefined) {
-        $('#fold-span').html(json['fold'])
-        makeTable('#df', json['table']);
+    if (res.ok) {
+        const json = await res.json();
+        if (json['table'] !== undefined) {
+            $('#fold-span').html(json['fold'])
+            makeTable('#df', json['table']);
+        }
     }
 }
 
@@ -34,15 +38,17 @@ async function toggle() {
         method: 'PUT',
         body: JSON.stringify({ 'action': action })
     });
-    const json = await res.json()
-    if (json['action'] === 'start') {
-        $('#toggle').text('Cancel');
-        $('#toggle').removeClass('btn-success').addClass('btn-danger');
-        recording = true;
-    } else if (json['action'] === 'cancel') {
-        $('#toggle').text('Start');
-        $('#toggle').removeClass('btn-danger').addClass('btn-success');
-        recording = false;
+    if (res.ok) {
+        const json = await res.json()
+        if (json['action'] === 'start') {
+            $('#toggle').text('Cancel');
+            $('#toggle').removeClass('btn-success').addClass('btn-danger');
+            recording = true;
+        } else if (json['action'] === 'cancel') {
+            $('#toggle').text('Start');
+            $('#toggle').removeClass('btn-danger').addClass('btn-success');
+            recording = false;
+        }
     }
 }
 
@@ -56,8 +62,8 @@ async function save(element) {
             method: 'PUT',
             body: JSON.stringify({ 'action': 'save', 'event': element.id, 'fold': fold })
         });
-        const json = await res.json()
-        if (json['action'] === 'save') {
+        if (res.ok) {
+            const json = await res.json()
             $('#toggle').text('Start');
             $('#toggle').removeClass('btn-danger').addClass('btn-success');
             $('#fold-span').html(json['fold']);
@@ -66,14 +72,14 @@ async function save(element) {
                 updateFolds('#fold-dropdown-div', folds, fold);
             }
             makeTable('#df', json['table']);
-            makeAudioPlayer('#player',json['filename'])
+            makeAudioPlayer('#player', json['filename'])
             recording = false;
+            //Plotly.update('fig', { x: [json['x']], y: [json['y']] }, { xaxis: { ticksuffix: "s" } });
         }
-        //Plotly.update('fig', { x: [json['x']], y: [json['y']] }, { xaxis: { ticksuffix: "s" } });
     }
 }
 
-function makeAudioPlayer(id,filename){
+function makeAudioPlayer(id, filename) {
     let inner_html = '<figure><figcaption>Last sample: </figcaption>';
     inner_html += '<audio src="/datasets/' + filename + '" controls preload="auto"></audio></figure>';
     $(id).html(inner_html);

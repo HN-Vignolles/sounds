@@ -19,10 +19,14 @@ sock = Sock(app)
 if not samples_path.exists():
     samples_path.mkdir()
 
+if os.name == 'posix':
+    # options can be 'alsa' or 'pulse'
+    input_format = 'alsa'
+if os.name == 'nt':
+    input_format = 'dshow'
+input_format = os.environ.get('INPUT_FMT') or input_format
 
-#input = {'format':'pulse','device':1}
-input = {'format':'alsa','device':'hw:1'}
-rec = Recorder(samples_path,input,rec_duration=2,sample_rate=16000)
+rec = Recorder(samples_path,input_format,rec_duration=2,sample_rate=16000)
 devices = rec.query_devices()
 
 
@@ -71,15 +75,18 @@ def get_table():
 def apiRec():
     action = request.get_json(force=True)['action']
     if action == 'start':
-        rec.start()
-        return {'action':'start'}
+        try:
+            rec.start()
+            return {'action':'start'}
+        except Exception as e:
+            return str(e),500
     
     elif action == 'device':
         # select device
         device_index = request.get_json(force=True)['index']
         device = [i for i in devices if i['index']==device_index][0]
-        rec.setDevice(device['name'])
-        return {'action':'device','device':device}
+        rec.setDevice(device['input_dev'])
+        return {'device':device}
 
     elif action == 'cancel':
         rec.cancel()
@@ -91,7 +98,7 @@ def apiRec():
         fold = req.get('fold','1') or '1'
         filename = rec.save(name,fold)
         table = getTable(samples_path / 'samples.csv',fold)
-        return {'action':'save','filename':filename,'table':table,'fold':fold}
+        return {'filename':filename,'table':table,'fold':fold}
 
     else:
         return "Bad request",400

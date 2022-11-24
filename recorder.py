@@ -50,12 +50,12 @@ class RecorderBase():
 
 
 class Recorder(RecorderBase):
-    def __init__(self,data_path,input,
+    def __init__(self,data_path,input_format,
                  rec_duration=2,sample_rate=44100,output_format='s16le'):
         super().__init__(rec_duration,sample_rate)
 
-        if not input:
-            raise ValueError("input must be supplied")
+        if not input_format:
+            raise ValueError("input format must be supplied")
         if not data_path:
             raise ValueError("data_path must be supplied")
         if output_format not in ['s16le']:
@@ -71,7 +71,7 @@ class Recorder(RecorderBase):
         out_buff_size = (self._sample_rate * self._bytes_per_sample) // self._chunk_size
         self._total_bytes = 0
 
-        # _circ_buff holds last `rec_duration` of captured audio
+        # `_circ_buff` holds last `rec_duration` of captured audio
         self._circ_buff = deque(maxlen=len * self._bytes_per_sample)
         
         # queue, to send chunks of chunk_size//2 to display captured audio in "roll mode"
@@ -80,12 +80,8 @@ class Recorder(RecorderBase):
         # array x (coordinates) for plotting the waveform:
         self.x = np.linspace(0,self._rec_duration,len).tolist()
 
-        # '-f lavfi -i "sine=frequency=880"'
-        self._input_fmt = input['format']
-        self._input_dev = input['device']
-        self._input_dev_str = f"-f {self._input_fmt} -ac 1 -i {self._input_dev}"
-        self.ffmpeg_cmd = f"/usr/bin/ffmpeg -re {self._input_dev_str} \
-                            -ar {sample_rate} -ac 1 -f {self._ffmpeg_str} -blocksize 1000 -flush_packets 1 -".split()
+        self._input_fmt = input_format
+        
         self._lock = Lock()
         self.data_path = Path(data_path)
         self.df_csv = self.data_path / 'samples.csv'
@@ -93,10 +89,39 @@ class Recorder(RecorderBase):
             df = pd.DataFrame(columns=df_columns)
             df.to_csv(self.df_csv,index=False)
 
+    def query_devices(self):
+        if self._input_fmt == 'pulse':
+            import pulsectl
+            pulse = pulsectl.Pulse('client')
+            sources = pulse.source_list()
+            s_dict = [{'index':str(source.index),'input_dev':str(source.index),'name':source.proplist['alsa.long_card_name']} for source in sources]
+            pulse.close()
+            return s_dict
+        elif self._input_fmt == 'alsa':
+            import re
+            arecordl = subprocess.Popen(['arecord','-l'],stdout=subprocess.PIPE)
+            s_dict = []
+            index = 0
+            for line in arecordl.stdout.readlines():
+                s = re.match('card ([0-9]+).*?\[([^\]]*)].*?device ([0-9]+).*?\[([^\]]*)]',line.decode('utf-8'),re.IGNORECASE)
+                if s:
+                    s_dict.append({'index':f'{index}','input_dev':f'hw:{s.group(1)},{s.group(3)}','name':f'{s.group(2)} - {s.group(4)}'})
+                    index += 1
+            return s_dict
+        elif self._input_fmt == 'lavfi':
+            return [{'index':'1','input_dev':'sine=frequency=440','name':'A440'}]
+        elif self._input_fmt == 'dshow':
+            raise NotImplementedError
+
+    def setDevice(self,device):
+        self._input_dev_str = f"-f {self._input_fmt} -ac 1 -i {device}"
+        self._ffmpeg_cmd = f"/usr/bin/ffmpeg -re {self._input_dev_str} \
+                            -ar {self._sample_rate} -ac 1 -f {self._ffmpeg_str} -blocksize 1000 -flush_packets 1 -".split()
+
     def start(self):
         if not self._recording:
             try:
-                self._ffmpeg = subprocess.Popen(self.ffmpeg_cmd,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
+                self._ffmpeg = subprocess.Popen(self._ffmpeg_cmd,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
             except:
                 raise
 
@@ -144,9 +169,10 @@ class Recorder(RecorderBase):
 
     def _get_unpack_str(self):
         """get the unpack string used by `struct.unpack()`
-        e.g. if we read chunks of 100 bytes from the ffmpeg output in little endian 16bit format,
+        e.g. if we read chunks of 100 bytes from the ffmpeg output in little endian 16-bit format,
         the method `decoded_chunk` needs to decode 50 values of 2-bytes, using the string: `<50h`
-        <: little endian; h: 2-byte integer"""
+
+        `<`: little endian; `h`: 2-byte integer"""
         return (formats[self._ffmpeg_str]['unpack'][0]
                 + str(self.decoded_chunk_size)
                 + formats[self._ffmpeg_str]['unpack'][1])
@@ -172,7 +198,7 @@ class Recorder(RecorderBase):
         """The output from ffmpeg is inserted into the recording buffer (circular)
         in chunks of `_chunk_size`, and in turn placed in an output queue
         for plotting purposes. This value is the size of the already decoded chunks,
-        e.g. 50 in case of int16 format, chunk_size=100 bytes"""
+        e.g. 50 in case of `s16le` format, `chunk_size=100` bytes"""
         return self._chunk_size//self._bytes_per_sample
 
     @property
@@ -191,30 +217,6 @@ class Recorder(RecorderBase):
             return round((self._total_bytes/delta_t)/1024,2)
         else:
             return 0
-
-    def setDevice(self,device):
-        pass
-        #sd.default.device = device
-
-    def query_devices(self):
-        if self._input_fmt == 'pulse':
-            import pulsectl
-            pulse = pulsectl.Pulse('client')
-            sources = pulse.source_list()
-            s_dict = [{'index':f'{source.index}','name':source.proplist['alsa.long_card_name']} for source in sources]
-            pulse.close()
-            return s_dict
-        elif self._input_fmt == 'alsa':
-            import re
-            arecordl = subprocess.Popen(['arecord','-l'],stdout=subprocess.PIPE)
-            s_dict = []
-            index = 0
-            for line in arecordl.stdout.readlines():
-                s = re.match('card ([0-9]+).*?\[([^\]]*)].*?device ([0-9]+).*?\[([^\]]*)]',line.decode('utf-8'),re.IGNORECASE)
-                if s:
-                    s_dict.append({'index':f'{index}','hw':f'hw:{s.group(1)},{s.group(3)}','name':f'{s.group(2)} - {s.group(4)}'})
-                    index += 1
-            return s_dict
 
     def save(self,name,fold):
         if self._recording:
