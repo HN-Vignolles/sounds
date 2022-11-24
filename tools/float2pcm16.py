@@ -9,5 +9,5 @@ if not converted_path.exists():
 wav_files = [str(i) for i in Path('./').glob('*.wav')]
 
 for wav in tqdm(wav_files):
-    data,samplerate = sf.read(wav)
-    sf.write(converted_path / wav,data,samplerate,subtype='PCM_16')
+    data, samplerate = sf.read(wav)
+    sf.write(converted_path / wav, data, samplerate, subtype='PCM_16')

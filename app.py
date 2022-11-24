@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 
 from flask import Flask
-from flask import send_from_directory,render_template, request, make_response, jsonify
+from flask import send_from_directory, render_template, request
 from flask_sock import Sock
-import json, os
+import json
+import os
 from recorder import Recorder
 from pathlib import Path
 import pandas as pd
-#from test_config import samples_path,sound_events
-from config import samples_path,sound_events
+from config import samples_path, sound_events
 
 
 app = Flask(__name__)
@@ -31,8 +31,8 @@ input_format = app.config.get('INPUT_FMT') or input_format
 
 
 rec = Recorder(samples_path,input_format,
-    rec_duration=app.config.get('REC_DURATION'),
-    sample_rate=app.config.get('SAMPLE_RATE'))
+               rec_duration=app.config.get('REC_DURATION'),
+               sample_rate=app.config.get('SAMPLE_RATE'))
 devices = rec.query_devices()
 
 
@@ -41,14 +41,18 @@ def base():
     df = pd.read_csv(samples_path / 'samples.csv')
     folds = set(df['fold'])
     table = []
-    return render_template('index.html',events=sound_events,devices=devices,table=table,folds=folds)
+    return render_template('index.html',
+                           events=sound_events,
+                           devices=devices,
+                           table=table,
+                           folds=folds)
 
 
 @sock.route('/ws')
 def handle(ws):
     try:
         while True:
-            #data = ws.receive()
+            # data = ws.receive()
             if rec.is_recording():
                 chunk = rec.decoded_chunk
                 if chunk:
@@ -58,15 +62,17 @@ def handle(ws):
         print(e)
     return ''
 
+
 @app.route('/datasets/<path:name>')
 def send_sample(name):
     return send_from_directory(samples_path,name)
+
 
 @app.route('/api/info')
 def get_media_info():
     data = {'atr':rec.atr,
             'dcs':rec.decoded_chunk_size,
-            'x':rec.x }
+            'x':rec.x}
     return data
 
 
@@ -86,11 +92,11 @@ def apiRec():
             return {'action':'start'}
         except Exception as e:
             return str(e),500
-    
+
     elif action == 'device':
         # select device
         device_index = request.get_json(force=True)['index']
-        device = [i for i in devices if i['index']==device_index][0]
+        device = [i for i in devices if i['index'] == device_index][0]
         rec.setDevice(device['input_dev'])
         return {'device':device}
 
@@ -100,11 +106,11 @@ def apiRec():
 
     elif action == 'save':
         req = request.get_json(force=True)
-        name = req.get('event','unnamed-event')
-        fold = req.get('fold','1') or '1'
+        name = req.get('event', 'unnamed-event')
+        fold = req.get('fold', '1') or '1'
         filename = rec.save(name,fold)
-        table = getTable(samples_path / 'samples.csv',fold)
-        return {'filename':filename,'table':table,'fold':fold}
+        table = getTable(samples_path / 'samples.csv', fold)
+        return {'filename':filename, 'table':table, 'fold':fold}
 
     else:
         return "Bad request",400

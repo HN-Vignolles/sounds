@@ -10,4 +10,3 @@ sound_events = ['Pentametric-fan-event-A',
                 'Orth-Effect',
                 'Marzelvane-Sync','_test']
 sound_events.sort()
-
