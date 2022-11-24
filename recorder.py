@@ -110,7 +110,7 @@ class Recorder(RecorderBase):
             return s_dict
         elif self._input_fmt == 'lavfi':
             return [{'index':'1','input_dev':'sine=frequency=440','name':'A440'}]
-        elif self._input_fmt == 'dshow':
+        else:
             raise NotImplementedError
 
     def setDevice(self,device):
@@ -218,17 +218,25 @@ class Recorder(RecorderBase):
         else:
             return 0
 
-    def save(self,name,fold):
+    def save(self,name:str,fold):
+        """stop recording and save
+        
+        if `name` starts with `_`, a unique id is not added (`uuid4`).
+        In this case, successive recordings are overwritten, and the
+        filename is not added to the dataframe"""
         if self._recording:
             self._recording = False
             self._ffmpeg.kill()
-            filename = f'{name}-{uuid.uuid4()}.wav'
             np_sample = self.np_circ_buff
+            if not name.startswith('_'):
+                filename = f'{name}-{uuid.uuid4()}.wav'
+                df = pd.read_csv(self.df_csv)
+                s = pd.Series([filename,-1,name,fold],index=df_columns)
+                df = pd.concat([df, s.to_frame().T])
+                df.to_csv(self.df_csv,index=False)
+            else:
+                filename = f'{name}.wav'
             sf.write(self.data_path / filename,np_sample,samplerate=self._sample_rate,subtype='PCM_16')
-            df = pd.read_csv(self.df_csv)
-            s = pd.Series([filename,-1,name,fold],index=df_columns)
-            df = pd.concat([df, s.to_frame().T])
-            df.to_csv(self.df_csv,index=False)
             return filename
 
 if __name__ == "__main__":

@@ -12,7 +12,10 @@ from config import samples_path,sound_events
 
 
 app = Flask(__name__)
+app.config.from_prefixed_env()  # e.g. FLASK_INPUT_FMT=lavfi ./app.py
 app.config['SECRET_KEY'] = os.urandom(42)
+app.config['SAMPLE_RATE'] = 16000
+app.config['REC_DURATION'] = 2
 sock = Sock(app)
 
 
@@ -24,9 +27,12 @@ if os.name == 'posix':
     input_format = 'alsa'
 if os.name == 'nt':
     input_format = 'dshow'
-input_format = os.environ.get('INPUT_FMT') or input_format
+input_format = app.config.get('INPUT_FMT') or input_format
 
-rec = Recorder(samples_path,input_format,rec_duration=2,sample_rate=16000)
+
+rec = Recorder(samples_path,input_format,
+    rec_duration=app.config.get('REC_DURATION'),
+    sample_rate=app.config.get('SAMPLE_RATE'))
 devices = rec.query_devices()
 
 
