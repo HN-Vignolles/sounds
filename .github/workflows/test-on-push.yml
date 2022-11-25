@@ -38,6 +38,8 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: ffmpeg log
-          path: ffmpeg_log.txt
+          path: |
+            ffmpeg_log.txt
+            recorder.log
           retention-days: 3
 
