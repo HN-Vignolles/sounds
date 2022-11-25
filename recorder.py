@@ -63,7 +63,7 @@ class RecorderBase():
 
 
 class Recorder(RecorderBase):
-    def __init__(self,data_path,input_format,
+    def __init__(self,data_path,ffmpeg_path,input_format,
                  rec_duration=2,sample_rate=44100,output_format='s16le'):
         super().__init__(rec_duration,sample_rate)
 
@@ -79,6 +79,7 @@ class Recorder(RecorderBase):
         self._ffmpeg_str = formats[output_format]['ffmpeg_str']
         self._chunk_size = 100
         self._unpack_str = self._get_unpack_str()
+        self._ffmpeg_path = ffmpeg_path
 
         len = self._rec_duration * self._sample_rate
         out_buff_size = ((self._sample_rate * self._bytes_per_sample)
@@ -106,6 +107,7 @@ class Recorder(RecorderBase):
             df.to_csv(self.df_csv,index=False)
 
         log.info(f"data path: {data_path}")
+        log.info(f"ffmpeg binary path: {ffmpeg_path}")
         log.info(f"input format: {input_format}")
         log.info(f"recording duration: {rec_duration}")
         log.info(f"sample rate: {sample_rate}")
@@ -151,7 +153,7 @@ class Recorder(RecorderBase):
 
     def setDevice(self,device):
         self._input_dev_str = f"-f {self._input_fmt} -ac 1 -i {device}"
-        self._ffmpeg_cmd = f"/usr/bin/ffmpeg -re {self._input_dev_str} \
+        self._ffmpeg_cmd = f"{self._ffmpeg_path} -re {self._input_dev_str} \
                             -ar {self._sample_rate} -ac 1 \
                             -f {self._ffmpeg_str} -blocksize 1000 \
                             -flush_packets 1 -".split()
@@ -160,7 +162,7 @@ class Recorder(RecorderBase):
     def start(self):
         if not self._recording:
             try:
-                self._ffmpeg_stderr = open('ffmpeg_log.txt','w',encoding='utf-8')
+                self._ffmpeg_stderr = open('ffmpeg.txt','w',encoding='utf-8')
                 self._ffmpeg = subprocess.Popen(self._ffmpeg_cmd,
                                                 stdout=subprocess.PIPE,
                                                 stderr=self._ffmpeg_stderr)

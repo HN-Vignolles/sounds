@@ -28,9 +28,10 @@ if os.name == 'posix':
 if os.name == 'nt':
     input_format = 'dshow'
 input_format = app.config.get('INPUT_FMT') or input_format
+ffmpeg_path = app.config.get('FFMPEG_BIN') or '/usr/bin/ffmpeg'
 
 
-rec = Recorder(samples_path,input_format,
+rec = Recorder(samples_path,ffmpeg_path,input_format,
                rec_duration=app.config.get('REC_DURATION'),
                sample_rate=app.config.get('SAMPLE_RATE'))
 devices = rec.query_devices()

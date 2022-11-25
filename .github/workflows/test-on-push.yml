@@ -4,13 +4,14 @@ on: [push]
 
 env:
   FLASK_INPUT_FMT: lavfi
+  FLASK_FFMPEG_BIN: ffmpeg
   
 jobs:
   ffmpeg-test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.7","3.8","3.9","3.10"]
+        python-version: ["3.7"]
 
     steps:
       - uses: actions/checkout@v2
