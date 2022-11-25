@@ -30,7 +30,8 @@ def test_ffmpeg_output():
     duration = app.config.get('REC_DURATION')
     y = np.fft.rfft(data)
     x = np.fft.rfftfreq(sample_rate*duration, 1/sample_rate)
-    print(x[np.argmax(np.abs(y))])
+    assert x[np.argmax(np.abs(y))] == 440
+    print("OK")
 
 
 def main():

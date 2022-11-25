@@ -78,8 +78,8 @@ class Recorder(RecorderBase):
         # `_circ_buff` holds last `rec_duration` of captured audio
         self._circ_buff = deque(maxlen=len * self._bytes_per_sample)
 
-        """queue, to send chunks of `chunk_size//2`
-        to display captured audio in 'roll mode'"""
+        # queue, to send chunks of `chunk_size//2`
+        # to display captured audio in 'roll mode'
         self._out_buff = deque(maxlen=out_buff_size*2)   # 2: safe margin
 
         # array x (coordinates) for plotting the waveform:
@@ -87,6 +87,7 @@ class Recorder(RecorderBase):
 
         self._input_fmt = input_format
 
+        self._ffmpeg_stderr = None
         self._lock = Lock()
         self.data_path = Path(data_path)
         self.df_csv = self.data_path / 'samples.csv'
@@ -135,10 +136,12 @@ class Recorder(RecorderBase):
     def start(self):
         if not self._recording:
             try:
+                self._ffmpeg_stderr = open('ffmpeg_log.txt','w',encoding='utf-8')
                 self._ffmpeg = subprocess.Popen(self._ffmpeg_cmd,
                                                 stdout=subprocess.PIPE,
-                                                stderr=subprocess.DEVNULL)
+                                                stderr=self._ffmpeg_stderr)
             except Exception:
+                self._ffmpeg_stderr.close()
                 raise
 
             stdout_peek = self._ffmpeg.stdout.peek(10)
@@ -181,6 +184,7 @@ class Recorder(RecorderBase):
             self._recording = False
             self._total_bytes = 0
             self._ffmpeg.kill()
+            self._ffmpeg_stderr.close()
             self._reader_thread.join()
             # self._stderr_thread.join()
 
@@ -248,6 +252,7 @@ class Recorder(RecorderBase):
         if self._recording:
             self._recording = False
             self._ffmpeg.kill()
+            self._ffmpeg_stderr.close()
             np_sample = self.np_circ_buff
             if not name.startswith('_'):
                 filename = f'{name}-{uuid.uuid4()}.wav'
