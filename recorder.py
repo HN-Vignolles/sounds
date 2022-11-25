@@ -4,6 +4,7 @@ import time
 import os
 import subprocess
 import uuid
+import logging
 from collections import deque
 from struct import unpack
 from pathlib import Path
@@ -12,6 +13,15 @@ from threading import Lock, Thread
 import numpy as np
 import pandas as pd
 import soundfile as sf
+
+
+log = logging.getLogger("recorder")
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(name)-12s %(levelname)-8s %(message)s",
+    filename="recorder.log"
+)
+log.setLevel(logging.DEBUG)
 
 
 df_columns = ['filename','target','category','fold']
@@ -95,6 +105,12 @@ class Recorder(RecorderBase):
             df = pd.DataFrame(columns=df_columns)
             df.to_csv(self.df_csv,index=False)
 
+        log.info(f"data path: {data_path}")
+        log.info(f"input format: {input_format}")
+        log.info(f"recording duration: {rec_duration}")
+        log.info(f"sample rate: {sample_rate}")
+        log.info(f"output format: {output_format}")
+
     def query_devices(self):
         if self._input_fmt == 'pulse':
             import pulsectl
@@ -104,7 +120,9 @@ class Recorder(RecorderBase):
                        'input_dev':str(source.index),
                        'name':source.proplist['alsa.long_card_name']} for source in sources]
             pulse.close()
+            log.debug(f"devices: {s_dict}")
             return s_dict
+
         elif self._input_fmt == 'alsa':
             import re
             arecordl = subprocess.Popen(['arecord','-l'], stdout=subprocess.PIPE)
@@ -118,11 +136,16 @@ class Recorder(RecorderBase):
                                    'input_dev':f'hw:{s.group(1)},{s.group(3)}',
                                    'name':f'{s.group(2)} - {s.group(4)}'})
                     index += 1
+            log.debug(f"devices: {s_dict}")
             return s_dict
+
         elif self._input_fmt == 'lavfi':
-            return [{'index':'1',
-                     'input_dev':'sine=frequency=440',
-                     'name':'A440'}]
+            s_dict = [{'index':'1',
+                       'input_dev':'sine=frequency=440',
+                       'name':'A440'}]
+            log.debug(f"devices: {s_dict}")
+            return s_dict
+
         else:
             raise NotImplementedError
 
@@ -132,6 +155,7 @@ class Recorder(RecorderBase):
                             -ar {self._sample_rate} -ac 1 \
                             -f {self._ffmpeg_str} -blocksize 1000 \
                             -flush_packets 1 -".split()
+        log.debug(f"ffmpeg command string: {' '.join(self._ffmpeg_cmd)}")
 
     def start(self):
         if not self._recording:
@@ -148,22 +172,8 @@ class Recorder(RecorderBase):
             if not stdout_peek:
                 raise RuntimeError("ffmpeg cmd doesn't return any data")
             self._recording = True
+            log.info("ffmpeg process started")
             self._start_reader()
-            # self._start_stderr_reader()
-
-    def _start_stderr_reader(self):
-        self._stderr_thread = Thread(target=self._stderr_reader,args=())
-        self._stderr_thread.daemon = True
-        self._stderr_thread.start()
-
-    def _stderr_reader(self):
-        try:
-            while self._recording:
-                b = self._ffmpeg.stderr.read(100)
-                if b:
-                    print(b.decode('utf-8'))
-        except Exception as e:
-            print('stderr_reader: ',e)
 
     def _reader(self):
         self._reader_start_t = time.time()
@@ -177,7 +187,7 @@ class Recorder(RecorderBase):
                 # self._lock.release()
 
         except Exception as e:
-            print(e)
+            log.error(f"reader error: {e}")
 
     def cancel(self):
         if self._recording:
@@ -186,7 +196,6 @@ class Recorder(RecorderBase):
             self._ffmpeg.kill()
             self._ffmpeg_stderr.close()
             self._reader_thread.join()
-            # self._stderr_thread.join()
 
     def _get_unpack_str(self):
         """get the unpack string used by `struct.unpack()` e.g. if
@@ -195,9 +204,11 @@ class Recorder(RecorderBase):
         to decode 50 values of 2-bytes, using the string: `<50h`
 
         `<`: little endian; `h`: 2-byte integer"""
-        return (formats[self._ffmpeg_str]['unpack'][0]
-                + str(self.decoded_chunk_size)
-                + formats[self._ffmpeg_str]['unpack'][1])
+        unpack_str = (formats[self._ffmpeg_str]['unpack'][0]
+                      + str(self.decoded_chunk_size)
+                      + formats[self._ffmpeg_str]['unpack'][1])
+        log.debug(f"unpack string: {unpack_str}")
+        return unpack_str
 
     @property
     def np_circ_buff(self):
@@ -266,6 +277,7 @@ class Recorder(RecorderBase):
                      np_sample,
                      samplerate=self._sample_rate,
                      subtype='PCM_16')
+            log.info(f"{filename} saved")
             return filename
 
 
