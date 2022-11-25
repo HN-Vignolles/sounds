@@ -9,6 +9,3 @@ pip install -r requirements.txt
 ```bash
 python app.py
 ```
-
-# TODO
-- https://github.com/marketplace/actions/setup-ffmpeg plus sine wave test?
