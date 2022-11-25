@@ -34,13 +34,14 @@ jobs:
       - name: test ffmpeg input
         run: |
           python test.py -i
-      - name: ffmpeg input test failed
-        if: ${{ failure() }}
+      - name: ffmpeg input test log
         uses: actions/upload-artifact@v3
         with:
-          name: ffmpeg log
+          name: upload log files
           path: |
-            ffmpeg_log.txt
+            ffmpeg.txt
             recorder.log
           retention-days: 3
-
+      - name: test ffmpeg output
+        run: |
+          python test.py -o
