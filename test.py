@@ -4,7 +4,6 @@ import time
 import sys
 import getopt
 import os
-import sys
 from app import app
 from config import samples_path
 import soundfile as sf
