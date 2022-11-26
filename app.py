@@ -23,7 +23,7 @@ if not samples_path.exists():
     samples_path.mkdir()
 
 if os.name == 'posix':
-    # options can be 'alsa' or 'pulse'
+    # options might be 'alsa' or 'pulse'
     input_format = 'alsa'
 if os.name == 'nt':
     input_format = 'dshow'
@@ -71,9 +71,11 @@ def send_sample(name):
 
 @app.route('/api/info')
 def get_media_info():
-    data = {'atr':rec.atr,
-            'dcs':rec.decoded_chunk_size,
-            'x':rec.x}
+    data = {
+        'atr':rec.atr,
+        'dcs':rec.decoded_chunk_size,
+        'x':rec.x
+    }
     return data
 
 
