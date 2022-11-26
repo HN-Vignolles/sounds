@@ -3,12 +3,15 @@
 import time
 import sys
 import getopt
+import os
+import sys
 from app import app
 from config import samples_path
 import soundfile as sf
 import numpy as np
 
-test_wav = '_test2'
+
+test_event = '_test'
 
 
 def apiRec(json: dict):
@@ -20,12 +23,12 @@ def test_ffmpeg_input():
     apiRec({'action':'device', 'index': '1'})
     apiRec({'action':'start'})
     time.sleep(2.5)
-    apiRec({'action':'save', 'event':'_test2', 'fold':'1'})
+    apiRec({'action':'save', 'event':test_event, 'fold':'1'})
     print("OK")
 
 
 def test_ffmpeg_output():
-    data,sample_rate = sf.read(samples_path / '_test2.wav')
+    data,sample_rate = sf.read((samples_path / test_event).with_suffix('.wav'))
     assert sample_rate == app.config.get('SAMPLE_RATE')
     duration = app.config.get('REC_DURATION')
     y = np.fft.rfft(data)
@@ -35,6 +38,11 @@ def test_ffmpeg_output():
 
 
 def main():
+    fmt = os.environ.get('FLASK_INPUT_FORMAT')
+    if fmt != 'lavfi':
+        print("environment variable 'FLASK_INPUT_FORMAT' should be "
+              "set to 'lavfi' for this test")
+        sys.exit(1)
     try:
         opts,args = getopt.getopt(sys.argv[1:], 'io')
     except getopt.GetoptError as e:
