@@ -6,13 +6,12 @@ from flask_sock import Sock
 import json
 import os
 from recorder import Recorder
-from pathlib import Path
 import pandas as pd
 from config import samples_path, sound_events
 
 
 app = Flask(__name__)
-app.config.from_prefixed_env()  # e.g. FLASK_INPUT_FMT=lavfi ./app.py
+app.config.from_prefixed_env()
 app.config['SECRET_KEY'] = os.urandom(42)
 app.config['SAMPLE_RATE'] = 16000
 app.config['REC_DURATION'] = 2
@@ -27,7 +26,7 @@ if os.name == 'posix':
     input_format = 'alsa'
 if os.name == 'nt':
     input_format = 'dshow'
-input_format = app.config.get('INPUT_FMT') or input_format
+input_format = app.config.get('INPUT_FORMAT') or input_format
 ffmpeg_path = app.config.get('FFMPEG_BIN') or '/usr/bin/ffmpeg'
 
 
