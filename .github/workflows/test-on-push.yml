@@ -3,7 +3,7 @@ name: test-rec-backend
 on: [push]
 
 env:
-  FLASK_INPUT_FMT: lavfi
+  FLASK_INPUT_FORMAT: lavfi
   FLASK_FFMPEG_BIN: ffmpeg
   
 jobs:
@@ -30,14 +30,14 @@ jobs:
           pip install -r requirements.txt
       - name: Lint with flake8
         run: |
-          flake8 . --count --extend-ignore E231,F401 --max-line-length=127 --show-source --statistics
+          flake8 . --count --exit-zero --extend-ignore E231 --max-line-length=127 --show-source --statistics
       - name: test ffmpeg input
         run: |
           python test.py -i
       - name: ffmpeg input test log
         uses: actions/upload-artifact@v3
         with:
-          name: upload log files
+          name: log files
           path: |
             ffmpeg.txt
             recorder.log
