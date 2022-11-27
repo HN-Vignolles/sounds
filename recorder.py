@@ -1,5 +1,3 @@
-import code
-import sys
 import time
 import os
 import subprocess
@@ -18,7 +16,7 @@ import soundfile as sf
 log = logging.getLogger("recorder")
 logging.basicConfig(
     level=logging.DEBUG,
-    format="%(asctime)s - %(name)-12s %(levelname)-8s %(message)s",
+    format="%(asctime)s - %(filename)-14s:%(lineno)-4d %(levelname)-8s %(message)s",
     filename="recorder.log"
 )
 log.setLevel(logging.DEBUG)
@@ -27,45 +25,19 @@ log.setLevel(logging.DEBUG)
 df_columns = ['filename','target','category','fold']
 pd.set_option('max_colwidth',None)
 formats = {
-    's16le':{'bytes_per_sample':2,'ffmpeg_str':'s16le','unpack':['<','h']}
+    's16le':{
+        'ffmpeg_str':'s16le',  # PCM signed 16-bit little-endian
+        'bytes_per_sample':2,  # 16-bit
+        'unpack':['<','h'],    # `<`: little endian, `h`: 2-byte integer; c.f. struct.unpack
+        'dtype':'<i2',         # used by numpy.frombuffer
+        'subtype':'PCM_16'     # used by soundfile.save
+    }
 }
 
 
 class RecorderBase():
-    def __init__(self,rec_duration,sample_rate):
-        self._rec_duration = rec_duration
-        self._sample_rate = sample_rate
-        self._recording = False
-
-    def _start_reader(self):
-        self._reader_thread = Thread(target=self._reader,args=())
-        self._reader_thread.daemon = True
-        self._reader_thread.start()
-
-    def start(self):
-        """start recording"""
-
-    def cancel(self):
-        """stop recording without saving (backend)"""
-
-    def _reader(self):
-        """reader thread for reading from the
-        ffmpeg stdout into a deque"""
-
-    def query_devices(self):
-        """query source devices"""
-
-    def setDevice(self,device):
-        """set input device"""
-
-    def is_recording(self):
-        return self._recording
-
-
-class Recorder(RecorderBase):
     def __init__(self,data_path,ffmpeg_path,input_format,
                  rec_duration=2,sample_rate=44100,output_format='s16le'):
-        super().__init__(rec_duration,sample_rate)
 
         if not input_format:
             raise ValueError("input format must be supplied")
@@ -75,8 +47,14 @@ class Recorder(RecorderBase):
             # TODO: add 'f32le'
             raise ValueError(f"{output_format} not implemented yet")
 
+        self._rec_duration = rec_duration
+        self._sample_rate = sample_rate
+        self._recording = False
+
         self._bytes_per_sample = formats[output_format]['bytes_per_sample']
         self._ffmpeg_str = formats[output_format]['ffmpeg_str']
+        self._dtype = formats[output_format]['dtype']
+        self._subtype = formats[output_format]['subtype']
         self._chunk_size = 100
         self._unpack_str = self._get_unpack_str()
         self._ffmpeg_path = ffmpeg_path
@@ -106,67 +84,36 @@ class Recorder(RecorderBase):
             df = pd.DataFrame(columns=df_columns)
             df.to_csv(self.df_csv,index=False)
 
-        log.info(f"data path: {data_path}")
-        log.info(f"ffmpeg binary path: {ffmpeg_path}")
-        log.info(f"input format: {input_format}")
+        log.info(f"data path: '{data_path}'")
+        log.info(f"ffmpeg binary path: '{ffmpeg_path}'")
+        log.info(f"input format: '{input_format}'")
         log.info(f"recording duration: {rec_duration}")
         log.info(f"sample rate: {sample_rate}")
-        log.info(f"output format: {output_format}")
+        log.info(f"output format: '{output_format}'")
 
-    def query_devices(self):
-        if self._input_fmt == 'pulse':
-            import pulsectl
-            pulse = pulsectl.Pulse('client')
-            sources = pulse.source_list()
-            s_dict = [{'index':str(source.index),
-                       'input_dev':str(source.index),
-                       'name':source.proplist['alsa.long_card_name']} for source in sources]
-            pulse.close()
-            log.debug(f"devices: {s_dict}")
-            return s_dict
+    def _get_unpack_str(self):
+        """get the unpack string used by `struct.unpack()` e.g. if
+        we read chunks of 100 bytes from the ffmpeg output in little
+        endian 16-bit format, the method `decoded_chunk` needs
+        to decode 50 values of 2-bytes, using the string: `<50h`
 
-        elif self._input_fmt == 'alsa':
-            import re
-            arecordl = subprocess.Popen(['arecord','-l'], stdout=subprocess.PIPE)
-            s_dict = []
-            index = 0
-            re_str = r'card ([0-9]+).*?\[([^\]]*)].*?device ([0-9]+).*?\[([^\]]*)]'
-            for line in arecordl.stdout.readlines():
-                s = re.match(re_str,line.decode('utf-8'), re.IGNORECASE)
-                if s:
-                    s_dict.append({'index':f'{index}',
-                                   'input_dev':f'hw:{s.group(1)},{s.group(3)}',
-                                   'name':f'{s.group(2)} - {s.group(4)}'})
-                    index += 1
-            log.debug(f"devices: {s_dict}")
-            return s_dict
-
-        elif self._input_fmt == 'lavfi':
-            s_dict = [{'index':'1',
-                       'input_dev':'sine=frequency=440',
-                       'name':'A440'}]
-            log.debug(f"devices: {s_dict}")
-            return s_dict
-
-        else:
-            raise NotImplementedError
-
-    def setDevice(self,device):
-        self._input_dev_str = f"-f {self._input_fmt} -ac 1 -i {device}"
-        self._ffmpeg_cmd = f"{self._ffmpeg_path} -re {self._input_dev_str} \
-                            -ar {self._sample_rate} -ac 1 \
-                            -f {self._ffmpeg_str} -blocksize 1000 \
-                            -flush_packets 1 -".split()
-        log.debug(f"ffmpeg command string: {' '.join(self._ffmpeg_cmd)}")
+        `<`: little endian; `h`: 2-byte integer"""
+        unpack_str = (formats[self._ffmpeg_str]['unpack'][0]
+                      + str(self.decoded_chunk_size)
+                      + formats[self._ffmpeg_str]['unpack'][1])
+        log.debug(f"unpack string: '{unpack_str}'")
+        return unpack_str
 
     def start(self):
+        """start recording"""
         if not self._recording:
             try:
                 self._ffmpeg_stderr = open('ffmpeg.txt','w',encoding='utf-8')
                 self._ffmpeg = subprocess.Popen(self._ffmpeg_cmd,
                                                 stdout=subprocess.PIPE,
                                                 stderr=self._ffmpeg_stderr)
-            except Exception:
+            except Exception as e:
+                log.exception(e)
                 self._ffmpeg_stderr.close()
                 raise
 
@@ -177,7 +124,14 @@ class Recorder(RecorderBase):
             log.info("ffmpeg process started")
             self._start_reader()
 
+    def _start_reader(self):
+        self._reader_thread = Thread(target=self._reader,args=())
+        self._reader_thread.daemon = True
+        self._reader_thread.start()
+
     def _reader(self):
+        """reader thread for reading from the
+        ffmpeg stdout into a deque"""
         self._reader_start_t = time.time()
         try:
             while self._recording:
@@ -192,6 +146,7 @@ class Recorder(RecorderBase):
             log.error(f"reader error: {e}")
 
     def cancel(self):
+        """stop recording without saving (backend)"""
         if self._recording:
             self._recording = False
             self._total_bytes = 0
@@ -199,24 +154,10 @@ class Recorder(RecorderBase):
             self._ffmpeg_stderr.close()
             self._reader_thread.join()
 
-    def _get_unpack_str(self):
-        """get the unpack string used by `struct.unpack()` e.g. if
-        we read chunks of 100 bytes from the ffmpeg output in little
-        endian 16-bit format, the method `decoded_chunk` needs
-        to decode 50 values of 2-bytes, using the string: `<50h`
-
-        `<`: little endian; `h`: 2-byte integer"""
-        unpack_str = (formats[self._ffmpeg_str]['unpack'][0]
-                      + str(self.decoded_chunk_size)
-                      + formats[self._ffmpeg_str]['unpack'][1])
-        log.debug(f"unpack string: {unpack_str}")
-        return unpack_str
-
     @property
     def np_circ_buff(self):
         """returns the content of the circular buffer as a 1D numpy array"""
-        # '<i2': little endian 16-bit integer
-        np_array = np.frombuffer(bytes(self._circ_buff),dtype='<i2')
+        np_array = np.frombuffer(bytes(self._circ_buff),dtype=self._dtype)
         return np_array
 
     @property
@@ -278,9 +219,70 @@ class Recorder(RecorderBase):
             sf.write(self.data_path / filename,
                      np_sample,
                      samplerate=self._sample_rate,
-                     subtype='PCM_16')
+                     subtype=self._subtype)
             log.info(f"{filename} saved")
             return filename
+
+    def query_devices(self):
+        """query source devices"""
+
+    def setDevice(self,device):
+        """set input device"""
+
+    def is_recording(self):
+        return self._recording
+
+
+if os.name == 'posix':
+    class Recorder(RecorderBase):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+
+        def query_devices(self):
+            if self._input_fmt == 'pulse':
+                import pulsectl
+                pulse = pulsectl.Pulse('client')
+                sources = pulse.source_list()
+                s_dict = [{'index':str(source.index),
+                           'input_dev':str(source.index),
+                           'name':source.proplist['alsa.long_card_name']} for source in sources]
+                pulse.close()
+                log.debug(f"devices: {s_dict}")
+                return s_dict
+
+            elif self._input_fmt == 'alsa':
+                import re
+                arecordl = subprocess.Popen(['arecord','-l'], stdout=subprocess.PIPE)
+                s_dict = []
+                index = 0
+                re_str = r'card ([0-9]+).*?\[([^\]]*)].*?device ([0-9]+).*?\[([^\]]*)]'
+                for line in arecordl.stdout.readlines():
+                    s = re.match(re_str,line.decode('utf-8'), re.IGNORECASE)
+                    if s:
+                        s_dict.append({'index':f'{index}',
+                                       'input_dev':f'hw:{s.group(1)},{s.group(3)}',
+                                       'name':f'{s.group(2)} - {s.group(4)}'})
+                        index += 1
+                log.debug(f"devices: {s_dict}")
+                return s_dict
+
+            elif self._input_fmt == 'lavfi':
+                s_dict = [{'index':'1',
+                           'input_dev':'sine=frequency=440',
+                           'name':'A440'}]
+                log.debug(f"devices: {s_dict}")
+                return s_dict
+
+            else:
+                raise NotImplementedError
+
+        def setDevice(self,device):
+            self._input_dev_str = f"-f {self._input_fmt} -ac 1 -i {device}"
+            self._ffmpeg_cmd = f"{self._ffmpeg_path} -re {self._input_dev_str} \
+                                -ar {self._sample_rate} -ac 1 \
+                                -f {self._ffmpeg_str} -blocksize 1000 \
+                                -flush_packets 1 -".split()
+            log.debug(f"ffmpeg command string: '{' '.join(self._ffmpeg_cmd)}'")
 
 
 if __name__ == "__main__":
