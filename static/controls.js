@@ -80,6 +80,12 @@ async function save(element) {
 }
 
 function makeAudioPlayer(id, filename) {
+    // c.f. https://stackoverflow.com/questions/25821915/how-to-force-the-html5-audio-tag-to-reload-a-changing-file
+    // solved by Alex P
+    console.log(filename)
+    if(filename.startsWith('_')){
+        filename += "?cb=" + new Date().getTime();
+    }
     let inner_html = '<figure><figcaption>Last sample: </figcaption>';
     inner_html += '<audio src="/datasets/' + filename + '" controls preload="auto"></audio></figure>';
     $(id).html(inner_html);
