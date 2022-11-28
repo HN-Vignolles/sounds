@@ -27,8 +27,7 @@ if os.name == 'posix':
 if os.name == 'nt':
     input_format = 'dshow'
 input_format = app.config.get('INPUT_FORMAT') or input_format
-ffmpeg_path = app.config.get('FFMPEG_BIN') or '/usr/bin/ffmpeg'
-
+ffmpeg_path = app.config.get('FFMPEG_BIN') or 'ffmpeg'
 
 rec = Recorder(samples_path,ffmpeg_path,input_format,
                rec_duration=app.config.get('REC_DURATION'),
@@ -39,7 +38,7 @@ devices = rec.query_devices()
 @app.route('/')
 def base():
     df = pd.read_csv(samples_path / 'samples.csv')
-    folds = set(df['fold'])
+    folds = set(df['fold']) or {1}
     table = []
     return render_template('index.html',
                            events=sound_events,
@@ -112,7 +111,12 @@ def apiRec():
         fold = req.get('fold', '1') or '1'
         filename = rec.save(name,fold)
         table = getTable(samples_path / 'samples.csv', fold)
-        return {'filename':filename, 'table':table, 'fold':fold}
+        data = {
+            'filename':filename,
+            'table':table,
+            'fold':fold
+        }
+        return data
 
     else:
         return "Bad request",400
@@ -120,8 +124,11 @@ def apiRec():
 
 def getTable(filename,fold):
     df = pd.read_csv(filename)
-    balance = df[df.fold.isin([int(fold)])]['category'].value_counts()
-    table = [s.split() for s in balance.to_string().split('\n')]
+    if not df.empty:
+        balance = df[df.fold.isin([int(fold)])]['category'].value_counts()
+        table = [s.split() for s in balance.to_string().split('\n')]
+    else:
+        table = [[' ',' ']]
     return table
 
 
