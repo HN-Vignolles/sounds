@@ -285,6 +285,71 @@ if os.name == 'posix':
             log.debug(f"ffmpeg command string: '{' '.join(self._ffmpeg_cmd)}'")
 
 
+if os.name == 'nt':
+    class Recorder(RecorderBase):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+
+        def query_devices(self):
+            if self._input_fmt == 'dshow':
+                import re
+                ffmpegld = subprocess.Popen(['ffmpeg','-hide_banner','-list_devices','true',
+                                         '-f','dshow','-i','dummy'], stderr=subprocess.PIPE)
+                """
+                Example output:
+                [dshow @ 000002a830333c00] "Microphone (Webcam C170)" (audio)
+                [dshow @ 000002a830333c00]   Alternative name "@device_cm_{33...A2}"
+                [dshow @ 000002a830333c00] "Stereo Mix (Realtek(R) Audio)" (audio)
+                [dshow @ 000002a830333c00]   Alternative name "@device_cm_{33...8D}"
+                """
+                s_dict = []
+                index = 0
+                name = ''
+                re_str1 = r'\[dshow @ [A-Za-z0-9]+] "([^"]*)" \(audio\)'
+                re_str2 = r'\[dshow @ [A-Za-z0-9]+].*?Alt.*?"([^"]*)'
+                l1_match = False
+                for line in ffmpegld.stderr.readlines():
+                    l1 = re.match(re_str1,line.decode('ascii'),re.IGNORECASE)
+                    l2 = re.match(re_str2,line.decode('ascii'),re.IGNORECASE)
+                    if l1:
+                        name = l1.group(1)
+                        l1_match = True
+                        continue
+                    if l1_match and l2:
+                        input_dev = f'audio="{l2.group(1)}"'
+                        s_dict.append({
+                            'index':str(index),
+                            'input_dev':input_dev,
+                            'name':name
+                        })
+                        index += 1
+                log.debug(f"devices: {s_dict}")
+                ffmpegld.kill()
+                return s_dict
+
+            elif self._input_fmt == 'lavfi':
+                s_dict = [{
+                    'index':'1',
+                    'input_dev':'sine=frequency=440',
+                    'name':'A440'
+                }]
+                log.debug(f"devices: {s_dict}")
+                return s_dict
+
+            else:
+                raise NotImplementedError
+
+        def setDevice(self,device):
+            import shlex
+            self._input_device = device
+            # Update ffmpeg args:
+            ffmpeg_cmd = f'{self._ffmpeg_path} -re \
+                           -f {self._input_fmt} -ac 1 -i {device} -ar {self._sample_rate} -ac 1 \
+                           -f {self._ffmpeg_str} -blocksize 1000 -flush_packets 1 -'
+            self._ffmpeg_cmd = shlex.split(ffmpeg_cmd)
+            log.debug(f"ffmpeg command string: {' '.join(self._ffmpeg_cmd)}")
+
+
 if __name__ == "__main__":
     rec = Recorder('./datasets',{'format':'pulse','device':1})
     # code.interact(local=dict(globals(),**locals()))
