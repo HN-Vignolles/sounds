@@ -69,7 +69,7 @@ async function save(element) {
             $('#fold-span').html(json['fold']);
             if (!folds.includes(fold)) {
                 folds.push(fold);
-                updateFolds('#fold-dropdown-div', folds, fold);
+                updateFolds('#fold-dropdown-div', fold);
             }
             makeTable('#df', json['table']);
             makeAudioPlayer('#player', json['filename'])
@@ -102,11 +102,11 @@ function makeTable(id, values) {
     $(id).html(inner_html);
 }
 
-function updateFolds(id, values) {
+function updateFolds(id, fold) {
     let inner_html = '<button class="btn btn-info dropdown-toggle" type="button" \
         id="fold-dropdown" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Fold:</button>';
     inner_html += '<div class="dropdown-menu" aria-labelledby="devices">';
-    values.forEach((e) => {
+    folds.forEach((e) => {
         inner_html += '<button class="dropdown-item" type="button" id="'
             + e + '" onclick="getTable(this)">' + e + '</button>';
     });
